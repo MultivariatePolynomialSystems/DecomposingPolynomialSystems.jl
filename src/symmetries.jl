@@ -11,6 +11,16 @@ struct FiniteSymmetryGroup
     structure::GapObj
 end
 
+struct AlgebraicGroup
+    vars_AG::Union{Vector{Variable}, Nothing} # λ₁, λ₂
+    vars_F::Vector{Variable} # x₁, x₂
+    F::System # defines a varietry on which the algebraic group acts
+    AG::Union{System, Nothing} # defines the variety of the algebraic group 
+    action::Dict{Vector{Variable}, Vector{Expression}} # ((λ₁, λ₂), (x₁, x₂)) --> (λ₁*x₁, λ₂*x₂)
+    # Dict(x₁ => λ₁*x₁, x₂ => λ₂*x₂)
+    structure::GapObj # \mathbb{C}^2, SO(3), Z/2Z x Z/2Z
+end
+
 function _mat2col_diffs(M)
     M = M - M[:,1]*ones(eltype(M), 1, size(M,2))
     return M[:,2:end]

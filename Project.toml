@@ -1,6 +1,6 @@
 name = "DecomposingPolynomialSystems"
 uuid = "cf38fc18-6d89-46f7-b5d1-3b4b6cd705e3"
-authors = ["coviktor <korotynskiy.viktor@gmail.com>"]
+authors = ["azoviktor <korotynskiy.viktor@gmail.com>"]
 version = "0.1.0"
 
 [deps]

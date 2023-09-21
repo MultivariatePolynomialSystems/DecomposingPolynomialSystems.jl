@@ -13,10 +13,10 @@ makedocs(
             "SampledSystem" => "Types/sampled_system.md",
             "SymmetryGroup" => "Types/symmetry_group.md"
         ],
-        hide("Simplifying Polynomial Systems" => [
+        "Simplifying Polynomial Systems" => [
             "Symmetries" => "SPS/symmetries.md",
             "Invariants" => "SPS/invariants.md"
-        ]),
+        ],
         "Examples from Algebraic Vision" => [
             "5-point problem" => "AV/5pp.md"
         ]
