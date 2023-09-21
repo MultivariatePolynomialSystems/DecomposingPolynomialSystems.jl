@@ -4,22 +4,22 @@ makedocs(
     sitename = "DecomposingPolynomialSystems.jl",
     modules  = [DecomposingPolynomialSystems],
     pages = [
-        "Home" => "index.md",
+        "index.md",
         "Numerical Algebraic Geometry" => [
             "Monodromy" => "NAG/monodromy.md",
-            "Symmetries" => "NAG/symmetries.md"
+            "Symmetries" => "NAG/symmetries.md",
         ],
         "Data Types" => [
             "SampledSystem" => "Types/sampled_system.md",
-            "SymmetryGroup" => "Types/symmetry_group.md"
+            "SymmetryGroup" => "Types/symmetry_group.md",
         ],
         "Simplifying Polynomial Systems" => [
             "Symmetries" => "SPS/symmetries.md",
-            "Invariants" => "SPS/invariants.md"
+            "Invariants" => "SPS/invariants.md",
         ],
         "Examples from Algebraic Vision" => [
-            "5-point problem" => "AV/5pp.md"
-        ]
+            "5-point problem" => "AV/5pp.md",
+        ],
     ])
 deploydocs(;
     repo="github.com/MultivariatePolynomialSystems/DecomposingPolynomialSystems.jl.git",
