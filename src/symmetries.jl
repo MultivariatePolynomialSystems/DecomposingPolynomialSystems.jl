@@ -40,7 +40,7 @@ function _snf_scaling_symmetries(F::System)::Tuple{Vector{Int}, Vector{Matrix{In
     return s, Us # TODO: what if max(Us[i]) > MAX_INT64?
 end
 
-function _hnf_reduce(grading::Grading)::Grading
+function _hnf_reduce!(grading::Grading)
     for (i, (sᵢ, Uᵢ)) in enumerate(grading)
         if sᵢ == 0
             grading[i] = (sᵢ, Matrix(hnf(matrix(ZZ, Uᵢ))))
@@ -48,7 +48,6 @@ function _hnf_reduce(grading::Grading)::Grading
             grading[i] = (sᵢ, lift.(Matrix(hnf(matrix(GF(sᵢ), Uᵢ)))))
         end
     end
-    return grading
 end
 
 function scaling_symmetries(F::System; in_hnf::Bool=true)::Grading
@@ -57,7 +56,8 @@ function scaling_symmetries(F::System; in_hnf::Bool=true)::Grading
         return []
     end
     grading = collect(zip(s, U))
-    return in_hnf ? _hnf_reduce(grading) : grading
+    if in_hnf _hnf_reduce!(grading) end
+    return grading
 end
 
 function scaling_symmetries!(F::SampledSystem; in_hnf::Bool=true)::Grading
@@ -70,11 +70,10 @@ function _remove_zero_rows(M::Matrix)::Matrix
     return transpose(VV2M(filter(!iszero, M2VV(transpose(M)))))
 end
 
-function _remove_zero_rows(grading::Grading)::Grading
+function _remove_zero_rows!(grading::Grading)
     for (i, (sᵢ, Uᵢ)) in enumerate(grading)
         grading[i] = (sᵢ, _remove_zero_rows(Uᵢ))
     end
-    return grading
 end
 
 function _remove_dependencies(grading::Grading)::Grading
@@ -88,7 +87,9 @@ function scaling_symmetries(F::System, vars::Vector{Variable})::Grading
     idx = [findfirst(v->v==var, Fvars) for var in vars]
     s, U = _snf_scaling_symmetries(F)
     U = [u[:, idx] for u in U]
-    grading = _remove_zero_rows(_hnf_reduce(collect(zip(s, U))))
+    grading = collect(zip(s, U))
+    _hnf_reduce!(grading)
+    _remove_zero_rows!(grading)
     return _remove_dependencies(grading)
 end
 
