@@ -6,11 +6,11 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "Numerical Algebraic Geometry" => [
-            hide("Monodromy" => "NAG/monodromy.md"),
-            hide("Symmetries" => "NAG/symmetries.md")
+            "Monodromy" => "NAG/monodromy.md",
+            "Symmetries" => "NAG/symmetries.md"
         ],
         "Data Types" => [
-            hide("SampledSystem" => "Types/sampled_system.md"),
+            "SampledSystem" => "Types/sampled_system.md",
             "SymmetryGroup" => "Types/symmetry_group.md"
         ],
         hide("Simplifying Polynomial Systems" => [
