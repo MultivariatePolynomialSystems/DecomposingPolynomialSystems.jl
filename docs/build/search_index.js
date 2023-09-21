@@ -1,0 +1,3 @@
+var documenterSearchIndex = {"docs":
+[{"location":"#DecomposingPolynomialsSystems.jl","page":"Home","title":"DecomposingPolynomialsSystems.jl","text":"","category":"section"},{"location":"","page":"Home","title":"Home","text":"The best package for simplifying systems of polynomial equations.","category":"page"},{"location":"#Package-Features","page":"Home","title":"Package Features","text":"","category":"section"},{"location":"","page":"Home","title":"Home","text":"Computing symmetries that fix the parameters of the polynomial system","category":"page"},{"location":"#Function-Documentation","page":"Home","title":"Function Documentation","text":"","category":"section"},{"location":"","page":"Home","title":"Home","text":"symmetries_fixing_parameters","category":"page"}]
+}
