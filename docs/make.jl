@@ -3,8 +3,9 @@ using DecomposingPolynomialSystems, Documenter
 makedocs(
     sitename = "DecomposingPolynomialSystems.jl",
     modules  = [DecomposingPolynomialSystems],
+    format=Documenter.HTML(; collapselevel=1),
     pages = [
-        "index.md",
+        "Introduction" => "index.md",
         "Numerical Algebraic Geometry" => [
             "Monodromy" => "NAG/monodromy.md",
             "Symmetries" => "NAG/symmetries.md",
