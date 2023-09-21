@@ -6,16 +6,17 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "Numerical Algebraic Geometry" => [
-            "NAG/monodromy.md",
-            "NAG/symmetries.md"
+            hide("Monodromy" => "NAG/monodromy.md"),
+            hide("Symmetries" => "NAG/symmetries.md")
         ],
         "Data Types" => [
-            "SampledSystem" => "Types/sampled_system.md"
+            hide("SampledSystem" => "Types/sampled_system.md"),
+            "SymmetryGroup" => "Types/symmetry_group.md"
         ],
-        "Simplifying Polynomial Systems" => [
+        hide("Simplifying Polynomial Systems" => [
             "Symmetries" => "SPS/symmetries.md",
             "Invariants" => "SPS/invariants.md"
-        ],
+        ]),
         "Examples from Algebraic Vision" => [
             "5-point problem" => "AV/5pp.md"
         ]
