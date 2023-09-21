@@ -8,7 +8,7 @@ DecomposingPolynomialSystems.jl is a Julia package that computes the symmetries 
 
 Enter the Pkg REPL by pressing `]` from the Julia REPL and then type
 ```julia
-add https://github.com/vviktorrK/DecomposingPolynomialSystems.jl.git
+add https://github.com/MultivariatePolynomialSystems/DecomposingPolynomialSystems.jl.git
 ```
 To get back to the Julia REPL, press backspace.
 

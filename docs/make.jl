@@ -21,5 +21,5 @@ makedocs(
         ]
     ])
 deploydocs(;
-    repo="github.com/vviktorrK/DecomposingPolynomialSystems.jl.git",
+    repo="github.com/MultivariatePolynomialSystems/DecomposingPolynomialSystems.jl.git",
 )
