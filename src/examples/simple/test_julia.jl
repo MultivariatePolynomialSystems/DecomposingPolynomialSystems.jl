@@ -47,3 +47,27 @@ using BenchmarkTools
 
 @btime prodMatrix(A);
 @btime prodSubmatrix(A);
+
+struct Foo
+    bar
+    baz::Vector{Int}
+end
+
+foo = Foo("Hello", [5])
+typeof(foo.bar)
+
+push!(foo.baz, 1)
+
+abstract type AlgebraicGroup end
+
+struct DeckTransformationGroup <: AlgebraicGroup
+    vars::Vector{Int}
+end
+
+DTG = DeckTransformationGroup([1, 2, 3])
+
+function print_vars(G::AlgebraicGroup)
+    @show G.vars
+end
+
+print_vars(DTG)

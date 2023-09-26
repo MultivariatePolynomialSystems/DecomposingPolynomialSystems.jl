@@ -6,7 +6,7 @@ export unknowns, parameters, variables, n_unknowns, n_parameters, n_variables
 Multidegree = Vector{Int8} # TODO: is it OK to suppose degrees are < 2^7 = 128?
 Grading = Vector{Tuple{Int, Matrix{Int}}}
 
-struct Monomials
+struct MonomialVector
     mds::Vector{Multidegree}
     vars::Vector{Variable}
 end
@@ -18,16 +18,44 @@ struct VarietySamples
 end
 
 mutable struct SampledSystem
-    system::System
+    const system::System
     samples::VarietySamples
     monodromy_permutations::Vector{Vector{Int}}
     block_partitions::Vector{Vector{Vector{Int}}}
     symmetry_permutations::Vector{Vector{Int}}
-    grading::Grading
 end
 
-# TODO: change constructor, or create inside struct definition?
-SampledSystem() = SampledSystem(System([]), VarietySamples(Array{CC}(undef, 0, 0, 0), Array{CC}(undef, 0, 0)), Array{Int}(undef, 0, 0), [], [], [])
+SampledSystem() = SampledSystem(
+    System([]),
+    VarietySamples(Array{CC}(undef, 0, 0, 0), Array{CC}(undef, 0, 0)),
+    Array{Int}(undef, 0, 0),
+    [], []
+)
+
+function SampledSystem(F::System, MR::MonodromyResult)
+    sols, p₀ = HomotopyContinuation.solutions(MR), MR.parameters
+    
+    solsM = VV2M(sols)
+    solutions, parameters = reshape(solsM, size(solsM)..., 1), reshape(p₀, length(p₀), 1)
+
+    if length(sols) == 1
+        return SampledSystem(F,
+            VarietySamples(solutions, parameters),
+            [], [], []
+        )
+    end
+
+    monodromy_permutations = filter_permutations(HomotopyContinuation.permutations(MR))
+    block_partitions = all_block_partitions(permutations_to_group(monodromy_permutations))
+    symmetry_permutations = group_to_permutations(centralizer(monodromy_permutations))
+
+    return SampledSystem(F,
+        VarietySamples(solutions, parameters),
+        monodromy_permutations,
+        block_partitions,
+        symmetry_permutations
+    )
+end
 
 unknowns(F::SampledSystem) = F.system.variables
 parameters(F::SampledSystem) = F.system.parameters
@@ -46,35 +74,28 @@ mutable struct FactorizingMap
     # deck_transformations::Vector{Vector{Expression}}
 end
 
-FactorizingMap(map::Vector{Expression}) = FactorizingMap(map, Ref{SampledSystem}(), Ref{SampledSystem}(), GAP.evalstr( "Group(())" ))
-
-function run_monodromy(F::System, xp0::Tuple{Vector{CC}, Vector{CC}}; options...)::SampledSystem
-    x0, p0 = xp0
-    MR = monodromy_solve(F, [x0], p0; permutations=true, options...)
-
-    sols = HomotopyContinuation.solutions(MR)
-    n_sols = length(sols)
-
-    if n_sols == 1
-        error("Just one solution was found, no monodromy group available. Try running again")
-    end
-
-    n_unknowns = length(x0)
-    n_params = length(p0)
-    solutions, parameters = reshape(VV2M(sols), n_unknowns, n_sols, 1), reshape(p0, n_params, 1)
-
-    monodromy_permutations = filter_permutations(HomotopyContinuation.permutations(MR))
-    println("Number of reasonable monodromy permutations: ", length(monodromy_permutations))
-
-    block_partitions = all_block_partitions(permutations_to_group(monodromy_permutations))
-    symmetry_permutations = group_to_permutations(centralizer(monodromy_permutations))
-
-    return SampledSystem(F, VarietySamples(solutions, parameters), monodromy_permutations, block_partitions, symmetry_permutations, [])
+function FactorizingMap(map::Vector{Expression})
+    return FactorizingMap(map,
+        Ref{SampledSystem}(),
+        Ref{SampledSystem}(),
+        GAP.evalstr( "Group(())" )
+    )
 end
 
 function run_monodromy(F::System; options...)::SampledSystem
-    xp0 = HomotopyContinuation.find_start_pair(F) # TODO: what if xp0 is nothing?
-    return run_monodromy(F, xp0; options...)
+    MR = monodromy_solve(F; permutations=true, options...)
+    if length(solutions(MR)) == 1
+        error("Just one solution was found, no monodromy group available. Try running again")
+    end
+    return SampledSystem(F, MR)
+end
+
+function run_monodromy(F::System, (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}}; options...)::SampledSystem
+    MR = monodromy_solve(F, [x₀], p₀; permutations=true, options...)
+    if length(solutions(MR)) == 1
+        error("No additional solutions were found, no monodromy group available. Try running again")
+    end
+    return SampledSystem(F, MR)
 end
 
 function extract_samples(data_points::Vector{Tuple{Result, Vector{CC}}}, F::SampledSystem)::Tuple{Array{CC, 3}, Array{CC, 2}}
@@ -91,7 +112,11 @@ function extract_samples(data_points::Vector{Tuple{Result, Vector{CC}}}, F::Samp
         params = data_points[i][2]
         while length(sols) != n_sols
             # println("Tracking solutions again...")
-            res = HomotopyContinuation.solve(F.system, sols0, start_parameters = p0, target_parameters = [randn(CC, n_params)])
+            res = HomotopyContinuation.solve(F.system,
+                sols0,
+                start_parameters = p0,
+                target_parameters = [randn(CC, n_params)]
+            )
             sols = HomotopyContinuation.solutions(res[1][1])
             params = res[1][2]
         end
@@ -106,7 +131,11 @@ function sample_system_once!(F::SampledSystem, target_params::Vector{CC})
     instance_id = rand(1:size(F.samples.solutions, 3))
     p0 = F.samples.parameters[:, instance_id]
     sols = M2VV(F.samples.solutions[:, :, instance_id])
-    data_points = HomotopyContinuation.solve(F.system, sols, start_parameters = p0, target_parameters = [target_params])
+    data_points = HomotopyContinuation.solve(F.system,
+        sols,
+        start_parameters = p0,
+        target_parameters = [target_params]
+    )
     
     n_unknowns, n_sols, _ = size(F.samples.solutions)
     solutions = zeros(CC, n_unknowns, n_sols, 1)
@@ -132,7 +161,11 @@ function sample_system!(F::SampledSystem, n_instances::Int)
         target_params = [randn(CC, length(p0)) for _ in 1:(n_instances-n_computed_instances)]
 
         println("Solving ", n_instances-n_computed_instances, " instances by homotopy continutation...")
-        data_points = HomotopyContinuation.solve(F.system, sols, start_parameters = p0, target_parameters = target_params)
+        data_points = HomotopyContinuation.solve(F.system,
+            sols,
+            start_parameters = p0,
+            target_parameters = target_params
+        )
 
         println("Extracting samples...")
         solutions, parameters = extract_samples(data_points, F)
@@ -149,7 +182,7 @@ end
 # supposes each md in mds is a multidegree in both unknowns and parameters
 # TODO: The implementation below (with _) is more efficient (approx 2x),
 # TODO: since it exploits the sparsity of multidegrees. REMOVE THIS METHOD?
-function evaluate_monomials_at_samples(mons::Monomials, samples::VarietySamples)::Array{CC, 3}
+function evaluate_monomials_at_samples(mons::MonomialVector, samples::VarietySamples)::Array{CC, 3}
     solutions = samples.solutions
     parameters = samples.parameters
 
@@ -171,7 +204,7 @@ end
 
 # supposes each md in mds is a multidegree in both unknowns and parameters
 # TODO: consider view for slices
-function evaluate_monomials_at_samples_(mons::Monomials, samples::VarietySamples)::Array{CC, 3}
+function evaluate_monomials_at_samples_(mons::MonomialVector, samples::VarietySamples)::Array{CC, 3}
     solutions = samples.solutions
     parameters = samples.parameters
 
