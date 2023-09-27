@@ -50,8 +50,12 @@ function partition_multidegrees(mds::Vector{Multidegree}, grading::Grading)::Dic
     return classes
 end
 
-function gcd_mds(MDs::Vector{Multidegree})::Multidegree
-    return M2V(minimum(VV2M(MDs), dims=2))
+function gcd_mds(mds::Vector{Multidegree})::Multidegree
+    return M2V(minimum(VV2M(mds), dims=2))
+end
+
+function gcd_mons(mons::MonomialVector)::Multidegree
+    return gcd_mds(mons.mds)
 end
 
 function mds2mons(mds::Vector{Multidegree}, vars::Vector{Variable})::Vector{Expression}
@@ -63,8 +67,12 @@ function only_param_dep(md::Multidegree, n_unknowns::Int)::Bool
     return iszero(md[1:n_unknowns])
 end
 
-function only_param_dep(MDs::Vector{Multidegree}, n_unknowns::Int)::Bool
-    return all([only_param_dep(md, n_unknowns) for md in MDs])
+function only_param_dep(mds::Vector{Multidegree}, n_unknowns::Int)::Bool
+    return all([only_param_dep(md, n_unknowns) for md in mds])
+end
+
+function only_param_dep(mons::MonomialVector, n_unknowns::Int)::Bool
+    return only_param_dep(mons.mds, n_unknowns)
 end
 
 function ArrayOrSubArray(dim::Int)
@@ -77,8 +85,8 @@ function check_func_type(func_type::String)
     end
 end
 
-function rational_function(coeffs::Vector{CC}, num_mons::Vector{Expression}, denom_mons::Vector{Expression}; printing::Bool=true, tol::Float64=1e-5)::Expression
-    n_num_mons, n_denom_mons = length(num_mons), length(denom_mons)
+function rational_function(coeffs::Vector{CC}, num_mons::MonomialVector, denom_mons::MonomialVector; logging::Bool=true, tol::Float64=1e-5)::Expression
+    n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
     @assert length(coeffs) == n_num_mons + n_denom_mons
     numerator, denominator = coeffs[1:n_num_mons], coeffs[n_num_mons+1:end]
     if norm(numerator) < tol
@@ -89,8 +97,9 @@ function rational_function(coeffs::Vector{CC}, num_mons::Vector{Expression}, den
     t = denominator[denominator .!= 0][1]
     numerator /= t
     denominator /= t
-    p, q = dot(numerator, num_mons), dot(denominator, denom_mons)
-    if printing
+    p = dot(numerator, mds2mons(num_mons.mds, num_mons.vars))
+    q = dot(denominator, mds2mons(denom_mons.mds, denom_mons.vars))
+    if logging
         println("rational function = ", p/q)
         println("numerator = ", p)
         println("denominator = ", q)
@@ -98,27 +107,27 @@ function rational_function(coeffs::Vector{CC}, num_mons::Vector{Expression}, den
     return p/q
 end
 
-function polynomial_function(coeffs::Vector{CC}, mons::Vector{Expression}; printing::Bool=true)::Expression
-    @assert length(coeffs) == length(mons)
-    p = dot(coeffs, mons)
-    if printing
+function polynomial_function(coeffs::Vector{CC}, mons::MonomialVector; logging::Bool=true)::Expression
+    @assert length(coeffs) == length(mons.mds)
+    p = dot(coeffs, mds2mons(mons.mds, mons.vars))
+    if logging
         println("polynomial = ", p)
     end
     return p
 end
 
-function reconstruct_function(coeffs::Vector{CC}, mons::Vector{Expression}; func_type::String, printing::Bool=true, tol::Float64=1e-5)
+function reconstruct_function(coeffs::Vector{CC}, mons::MonomialVector; func_type::String, logging::Bool=true, tol::Float64=1e-5)
     check_func_type(func_type)
     if func_type == "rational"
-        return rational_function(coeffs, mons, mons, printing=printing, tol=tol)
+        return rational_function(coeffs, mons, mons, logging=logging, tol=tol)
     else
-        return polynomial_function(coeffs, mons, printing=printing)
+        return polynomial_function(coeffs, mons, logging=logging)
     end
 end
 
-function rational_functions(coeffs::Matrix{CC}, num_mons::Vector{Expression}, denom_mons::Vector{Expression}; printing::Bool=true, tol::Float64=1e-5)
+function rational_functions(coeffs::Matrix{CC}, num_mons::MonomialVector, denom_mons::MonomialVector; logging::Bool=true, tol::Float64=1e-5)
     for k in eachindex(axes(coeffs, 1))
-        rational_function(coeffs[k,:], num_mons, denom_mons, printing=printing, tol=tol)
+        rational_function(coeffs[k,:], num_mons, denom_mons, logging=logging, tol=tol)
         println()
     end
 end

@@ -7,6 +7,10 @@ export symmetries_fixing_parameters!, symmetries_fixing_parameters
 
 NoExpression = Union{Nothing, Expression}
 
+struct RationalMap
+
+end
+
 struct DeckTransformationGroup
     action::Vector{Dict{Variable, NoExpression}}
     F::SampledSystem
@@ -14,7 +18,7 @@ struct DeckTransformationGroup
 end
 
 function DeckTransformationGroup(F::SampledSystem)
-    action = [Dict(zip(unknowns(F), Expression.(unknowns(F))))]
+    action = [Dict(zip(unknowns(F), Expression.(unknowns(F))))]  # TODO: Is conversion needed?
     return DeckTransformationGroup(action, F)
 end
 
@@ -28,10 +32,12 @@ end
 
 struct ScalingSymmetryGroup
     grading::Grading
+    vars::Vector{Variable}
     action::Vector{Tuple{Int, Dict{Variable, Expression}}}
 end
 
-Base.copy(s::ScalingSymmetryGroup) = ScalingSymmetryGroup(s.grading, s.action)
+ScalingSymmetryGroup() = ScalingSymmetryGroup([], [], [])
+Base.copy(s::ScalingSymmetryGroup) = ScalingSymmetryGroup(s.grading, s.vars, s.action)
 
 function _mat2col_diffs(M)
     M = M - M[:,1]*ones(eltype(M), 1, size(M,2))
@@ -93,12 +99,13 @@ end
 function scaling_symmetries(F::System; in_hnf::Bool=true)::ScalingSymmetryGroup
     s, U = _snf_scaling_symmetries(F)
     if length(s) == 0
-        return ScalingSymmetryGroup([], [])
+        return ScalingSymmetryGroup()
     end
     grading = collect(zip(s, U))
     if in_hnf _hnf_reduce!(grading) end
-    action = _to_expressions(grading, vcat(F.variables, F.parameters))
-    return ScalingSymmetryGroup(grading, action)
+    vars = vcat(F.variables, F.parameters)
+    action = _to_expressions(grading, vars)
+    return ScalingSymmetryGroup(grading, vars, action)
 end
 
 function scaling_symmetries(F::SampledSystem; in_hnf::Bool=true)::ScalingSymmetryGroup
@@ -106,13 +113,22 @@ function scaling_symmetries(F::SampledSystem; in_hnf::Bool=true)::ScalingSymmetr
 end
 
 function _remove_zero_rows(M::Matrix)::Matrix
-    return transpose(VV2M(filter(!iszero, M2VV(transpose(M)))))
+    nonzero_rows = filter(!iszero, M2VV(transpose(M)))
+    if length(nonzero_rows) == 0
+        return Matrix{eltype(M)}(undef, 0, size(M, 2))
+    end
+    return transpose(VV2M(nonzero_rows))
 end
 
-function _remove_zero_rows!(grading::Grading)
+function _remove_zero_rows(grading::Grading)::Grading
+    filtered_grading = Grading([])
     for (i, (sᵢ, Uᵢ)) in enumerate(grading)
-        grading[i] = (sᵢ, _remove_zero_rows(Uᵢ))
+        Uᵢ = _remove_zero_rows(Uᵢ)
+        if size(Uᵢ, 1) != 0
+            push!(filtered_grading, (sᵢ, Uᵢ))
+        end
     end
+    return filtered_grading
 end
 
 function _remove_dependencies(grading::Grading)::Grading
@@ -126,15 +142,14 @@ function scaling_symmetries(F::System, vars::Vector{Variable})::ScalingSymmetryG
     idx = [findfirst(v->v==var, Fvars) for var in vars]
     s, U = _snf_scaling_symmetries(F)
     if length(s) == 0
-        return ScalingSymmetryGroup([], [])
+        return ScalingSymmetryGroup()
     end
     U = [u[:, idx] for u in U]
     grading = collect(zip(s, U))
     _hnf_reduce!(grading)
-    _remove_zero_rows!(grading)
-    grading = _remove_dependencies(grading)
+    grading = _remove_dependencies(_remove_zero_rows(grading))
     action = _to_expressions(grading, vars)
-    return ScalingSymmetryGroup(grading, action)
+    return ScalingSymmetryGroup(grading, vars, action)
 end
 
 function scaling_symmetries(F::SampledSystem, vars::Vector{Variable})::ScalingSymmetryGroup
@@ -154,23 +169,23 @@ end
 
 # TODO: Can it be eps close to zero? Then the method isn't correctly written...
 # TODO: Do we need printing? Then passing mons isn't necessary, just their number
+# TODO: change the name of the method?
 function _remove_zero_nums_and_denoms(
     coeffs::Matrix{CC},
-    num_mons::Vector{Expression},
-    denom_mons::Vector{Expression};
+    num_mons::MonomialVector,
+    denom_mons::MonomialVector;
     logging::Bool=false
 )::Matrix{CC}
 
     reasonable_rows = []
-    n_num_mons, n_denom_mons = length(num_mons), length(denom_mons)
+    n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
     @assert size(coeffs, 2) == n_num_mons + n_denom_mons
     for i in 1:size(coeffs, 1)
         if (!all(iszero, coeffs[i, 1:n_num_mons]) && !all(iszero, coeffs[i, n_num_mons+1:end]))
             push!(reasonable_rows, i)
         elseif logging
             println("Removed: ",
-                dot(coeffs[i, 1:n_num_mons], num_mons) + dot(coeffs[i, n_num_mons+1:end],
-                denom_mons)
+                dot(coeffs[i, 1:n_num_mons], num_mons) + dot(coeffs[i, n_num_mons+1:end], denom_mons)  # TODO: convert to MonomialVector input
             )
         end
     end
@@ -179,7 +194,7 @@ end
 
 function _remove_zero_nums_and_denoms(
     coeffs::Matrix{CC},
-    mons::Vector{Expression};
+    mons::MonomialVector;
     logging::Bool=false
 )::Matrix{CC}
 
@@ -244,8 +259,8 @@ function _interpolate_symmetry_function(
     values::SubArray{CC, 2},
     eval_num_mons::Array{CC, 3},
     eval_denom_mons::Array{CC, 3},
-    num_mons::Vector{Expression},
-    denom_mons::Vector{Expression},
+    num_mons::MonomialVector,
+    denom_mons::MonomialVector,
     tol::Float64;
     logging::Bool=false
 )::NoExpression
@@ -268,7 +283,7 @@ function _interpolate_symmetry_function(
         return nothing
     end
     coeffs = good_representative(coeffs)
-    return rational_function(coeffs, num_mons, denom_mons; printing=false)
+    return rational_function(coeffs, num_mons, denom_mons; logging=false, tol=tol)
 end
 
 function _interpolate_symmetry_function(
@@ -293,42 +308,37 @@ function _interpolate_symmetry_function(
 end
 
 function symmetries_fixing_parameters_graded!(
-    F::SampledSystem, 
-    grading::Grading, 
-    mds::Vector{Multidegree}, 
-    classes::Dict{Vector{Int}, Vector{Int}}; 
+    F::SampledSystem,
+    scalings::ScalingSymmetryGroup,
+    mds::Vector{Multidegree},
+    classes::Dict{Vector{Int}, Vector{Int}};
     tol::Float64=1e-5,
 )::DeckTransformationGroup
-
-    unkns, vars = unknowns(F), variables(F)
     
-    max_n_mons = max(length.(collect(values(classes)))...) # size of the largest class
-    n_unknowns, n_sols, _ = size(F.samples.solutions)
+    max_n_mons = max(length.(collect(values(classes)))...)  # size of the largest class
+    n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
     n_instances = Int(ceil(2/n_sols*max_n_mons))
 
     C = F.symmetry_permutations
-    symmetries = _init_symmetries(length(C), unkns)
+    symmetries = _init_symmetries(length(C), unknowns(F))
 
     sample_system!(F, n_instances)
     
     for (num_deg, num_ids) in classes
-        num_mds = mds[num_ids]
-        num_mons = MonomialVector(num_mds, vars)
+        num_mons = MonomialVector(mds[num_ids], scalings.vars)
         eval_num_mons = nothing
         for i in 1:n_unknowns
-            denom_deg = _num_deg2denom_deg(num_deg, grading, i) # i-th variable
+            denom_deg = _num_deg2denom_deg(num_deg, scalings.grading, i)  # i-th variable
             denom_ids = get(classes, denom_deg, nothing)
             if !isnothing(denom_ids)
-                denom_mds = mds[denom_ids]
-                g = gcd_mds([gcd_mds(num_mds), gcd_mds(denom_mds)])
-                if iszero(g) & !only_param_dep(vcat(num_mds, denom_mds), n_unknowns)
+                denom_mons = MonomialVector(mds[denom_ids], scalings.vars)
+                g = gcd_mds([gcd_mons(num_mons), gcd_mons(denom_mons)])  # TODO: improve
+                if iszero(g) && (!only_param_dep(num_mons, n_unknowns) || !only_param_dep(denom_mons, n_unknowns))  # TODO: improve
                     if isnothing(eval_num_mons)
                         eval_num_mons = evaluate_monomials_at_samples_(num_mons, F.samples)
                     end
-                    denom_mons = MonomialVector(denom_mds, vars)
                     eval_denom_mons = evaluate_monomials_at_samples_(denom_mons, F.samples)
-                    for j in 2:length(C)
-                        symmetry = symmetries[j]
+                    for (j, symmetry) in enumerate(symmetries)
                         if isnothing(symmetry[i])
                             symmetry[i] = _interpolate_symmetry_function(
                                 C[j],
@@ -344,7 +354,7 @@ function symmetries_fixing_parameters_graded!(
                                     "Good representative for the ",
                                     j,
                                     "-th symmetry, variable ",
-                                    unkns[i],
+                                    unknowns(F)[i],
                                     ":\n",
                                     color=:red
                                 )
@@ -368,18 +378,17 @@ end
 
 function symmetries_fixing_parameters_graded!(
     F::SampledSystem,
-    grading::Grading;
-    degree_bound::Int,
+    scalings::ScalingSymmetryGroup;
+    degree_bound::Int=1,
     tol::Float64=1e-5,
-    param_dep::Bool=true
 )::DeckTransformationGroup
 
-    MDs = multidegrees_up_to_total_degree(n_variables(F), degree_bound)
-    classes = partition_multidegrees(MDs, grading)
+    mds = multidegrees_up_to_total_degree(length(scalings.vars), degree_bound)
+    classes = partition_multidegrees(mds, scalings.grading)
     return symmetries_fixing_parameters_graded!(
         F,
-        grading,
-        MDs,
+        scalings,
+        mds,
         classes;
         tol=tol
     )
@@ -388,11 +397,11 @@ end
 function symmetries_fixing_parameters_dense!(
     F::SampledSystem; 
     degree_bound::Int=1,
-    tol::Float64=1e-5,
-    param_dep::Bool=true
+    param_dep::Bool=true,
+    tol::Float64=1e-5
 )::DeckTransformationGroup
 
-    n_unknowns, n_sols, _ = size(F.samples.solutions)
+    n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
     vars = param_dep ? variables(F) : unknowns(F)  # vars --> interp_vars?
     n_vars = length(vars)
 
@@ -454,21 +463,22 @@ end
 function symmetries_fixing_parameters!(
     F::SampledSystem;
     degree_bound::Int=1,
-    tol::Float64=1e-5,
-    param_dep::Bool=true
+    param_dep::Bool=true,
+    tol::Float64=1e-5
 )::DeckTransformationGroup
 
     if length(F.symmetry_permutations) == 1 # trivial group of symmetries
         return DeckTransformationGroup(F) # return the identity group
     end
 
-    scalings = scaling_symmetries(F)
+    scalings = param_dep ? scaling_symmetries(F) : scaling_symmetries(F, unknowns(F))
+    # TODO: Verify, if finite scalings commute
     if length(scalings.grading) == 0
         return symmetries_fixing_parameters_dense!(
             F;
             degree_bound=degree_bound,
-            tol=tol,
-            param_dep=param_dep
+            param_dep=param_dep,
+            tol=tol
         )
     else
         println("Found non-trivial grading:")
@@ -478,20 +488,19 @@ function symmetries_fixing_parameters!(
         printstyled("Running graded version...\n", color=:green)
         return symmetries_fixing_parameters_graded!(
             F,
-            scalings.grading;
+            scalings;
             degree_bound=degree_bound,
-            tol=tol,
-            param_dep=param_dep
+            tol=tol
         )
     end
 end
 
-function symmetries_fixing_parameters(
+function symmetries_fixing_parameters(  # TODO: extend to take unknowns arg
     F::System,
     (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}};
     degree_bound::Int=1,
-    tol::Float64=1e-5,
     param_dep::Bool=true,
+    tol::Float64=1e-5,
     monodromy_options::Tuple=()
 )::DeckTransformationGroup
 
@@ -499,21 +508,37 @@ function symmetries_fixing_parameters(
     return symmetries_fixing_parameters!(
         F;
         degree_bound=degree_bound,
-        tol=tol,
-        param_dep=param_dep
+        param_dep=param_dep,
+        tol=tol
     )
 end
 
 """
-    symmetries_fixing_parameters(F::System; degree_bound=1, tol=1e-5, param_dep=true)
+    symmetries_fixing_parameters(F::System; degree_bound=1, param_dep=true, tol=1e-5)
 
 Given a polynomial system F returns the group of symmetries 
 of the polynomial system `F` that fix the parameters. The keyword
 argument `degree_bound` is used to set the upper bound for the
 degrees of numerator and denominator polynomials in expressions
 for the symmetries.
+
+```julia-repl
+julia> @var x[1:2] p[1:2]
+(Variable[x₁, x₂], Variable[p₁, p₂])
+
+julia> F = System([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; variables=x, parameters=p)
+System of length 2
+ 2 variables: x₁, x₂
+ 2 parameters: p₁, p₂
+
+ -p₁ + x₁^2 - x₂^2
+ -p₂ + 2*x₂*x₁
+
+julia> deck = symmetries_fixing_parameters(F, degree_bound=1, param_dep=false)
+
+```
 """
-function symmetries_fixing_parameters(
+function symmetries_fixing_parameters(  # TODO: extend to take a rational map
     F::System;
     degree_bound::Int=1,
     tol::Float64=1e-5,
