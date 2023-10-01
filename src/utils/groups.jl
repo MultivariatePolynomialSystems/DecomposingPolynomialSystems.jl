@@ -1,12 +1,16 @@
-export group_structure, permutations_to_group
+export group_structure, permutations_to_group, group_to_permutations
 
 function filter_permutations(perms::Matrix{Int})::Vector{Vector{Int}}
     nsols = length(perms[:,1])
     return filter!(x->!(0 in x) & (length(unique(x)) == nsols), [perms[:,i] for i in 1:size(perms, 2)])
 end
 
-function group_structure(G::GapObj)
+function group_structure(G::GapObj)::GapObj
     return GAP.Globals.StructureDescription(G)
+end
+
+function group_structure(perms::Vector{Vector{Int}})::String
+    return GAP.gap_to_julia(GAP.Globals.StructureDescription(permutations_to_group(perms)))
 end
 
 function permutations_to_group(perms::Vector{Vector{Int}})::GapObj
@@ -14,28 +18,19 @@ function permutations_to_group(perms::Vector{Vector{Int}})::GapObj
         return GAP.evalstr( "Group(())" )
     end
     Sym = GAP.Globals.SymmetricGroup(length(perms[1]))
-    gap_gens=[]
-    for i in eachindex(perms)
-        push!(gap_gens, GAP.Globals.PermList(GAP.julia_to_gap(perms[i])));
-    end
+    gap_gens = [GAP.Globals.PermList(GAP.julia_to_gap(perm)) for perm in perms]
     Gal = GAP.julia_to_gap(gap_gens)
     return GAP.Globals.Subgroup(Sym,Gal)
 end
 
-function block_partition(G::GapObj)
-    n = GAP.Globals.LargestMovedPoint(G) # TODO
-    return Vector{Vector{Int64}}(GAP.gap_to_julia(GAP.Globals.Blocks(G, GAP.julia_to_gap(Vector{Int64}(1:n)))))
+function perm_to_list(perm_gap::GapObj, n::Int)::Vector{Int}
+    return [GAP.Globals.OnPoints(i, perm_gap) for i in 1:n]
 end
 
-function all_block_partitions(G::GapObj)::Vector{Vector{Vector{Int}}}
-    all_blocks = GAP.gap_to_julia(Vector{Vector{Int64}}, GAP.Globals.AllBlocks(G))
-    n = GAP.Globals.LargestMovedPoint(G) # TODO
-    block_partitions = []
-    for block in all_blocks
-        block_partition = GAP.Globals.Blocks(G, GAP.julia_to_gap(Vector{Int64}(1:n)), GAP.julia_to_gap(block))
-        push!(block_partitions, GAP.gap_to_julia(Vector{Vector{Int64}}, block_partition))
-    end
-    return Vector{Vector{Vector{Int64}}}(block_partitions)
+function group_to_permutations(G::GapObj)::Vector{Vector{Int}}
+    elems_gap = GAP.Globals.Elements(G)
+    n = GAP.Globals.LargestMovedPoint(GAP.Globals.Parent(G))
+    return [perm_to_list(elem, n) for elem in elems_gap]
 end
 
 function centralizer(G::GapObj)::GapObj
@@ -54,13 +49,20 @@ function centralizer(perms::Vector{Vector{Int}})::GapObj
     return GAP.Globals.Intersection(cents...)
 end
 
-function group_to_permutations(G::GapObj)::Vector{Vector{Int}}
-    elems_gap = GAP.Globals.Elements(G)
-    elems_julia = []
-    for i = 1:GAP.Globals.Length(elems_gap)
-        push!(elems_julia, GAP.gap_to_julia(Vector{Int64}, GAP.Globals.ListPerm(elems_gap[i])))
+function block_partition(G::GapObj)
+    n = GAP.Globals.LargestMovedPoint(G) # TODO
+    return Vector{Vector{Int}}(GAP.gap_to_julia(GAP.Globals.Blocks(G, GAP.julia_to_gap(Vector{Int}(1:n)))))
+end
+
+function all_block_partitions(G::GapObj)::Vector{Vector{Vector{Int}}}
+    all_blocks = GAP.gap_to_julia(Vector{Vector{Int}}, GAP.Globals.AllBlocks(G))
+    n = GAP.Globals.LargestMovedPoint(G) # TODO
+    block_partitions = []
+    for block in all_blocks
+        block_partition = GAP.Globals.Blocks(G, GAP.julia_to_gap(Vector{Int}(1:n)), GAP.julia_to_gap(block))
+        push!(block_partitions, GAP.gap_to_julia(Vector{Vector{Int}}, block_partition))
     end
-    return elems_julia
+    return Vector{Vector{Vector{Int}}}(block_partitions)
 end
 
 function action_on_blocks(G::GapObj, block_partition::Vector{Vector{Int}})::GapObj

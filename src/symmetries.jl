@@ -11,15 +11,16 @@ struct RationalMap
 
 end
 
+# TODO: make pretty printing
 struct DeckTransformationGroup
     action::Vector{Dict{Variable, NoExpression}}
+    structure::String
     F::SampledSystem
-    # structure::GapObj
 end
 
 function DeckTransformationGroup(F::SampledSystem)
     action = [Dict(zip(unknowns(F), Expression.(unknowns(F))))]  # TODO: Is conversion needed?
-    return DeckTransformationGroup(action, F)
+    return DeckTransformationGroup(action, group_structure(F.symmetry_permutations), F)
 end
 
 function DeckTransformationGroup(
@@ -27,9 +28,16 @@ function DeckTransformationGroup(
     F::SampledSystem
 )
     action = [Dict(zip(unknowns(F), symmetry)) for symmetry in symmetries]
-    return DeckTransformationGroup(action, F)
+    return DeckTransformationGroup(action, group_structure(F.symmetry_permutations), F)
 end
 
+function Base.show(io::IO, deck::DeckTransformationGroup)
+    println(io, "DeckTransformationGroup")
+    print(io, " structure: ", deck.structure)
+    
+end
+
+# TODO: make pretty printing
 struct ScalingSymmetryGroup
     grading::Grading
     vars::Vector{Variable}
@@ -86,8 +94,6 @@ function _to_expressions(grading::Grading, vars::Vector{Variable})
         @var λ[(k+1):(n_scalings+k)]
         for j in 1:n_scalings
             nonzero_ids = findall(!iszero, Uᵢ[j, :])
-            println("k = ", k)
-            println("j = ", j)
             vals = (λ[j].^Uᵢ[j, :][nonzero_ids]).*vars[nonzero_ids]
             push!(action, (sᵢ, Dict(zip(vars[nonzero_ids], vals))))
         end
@@ -96,6 +102,28 @@ function _to_expressions(grading::Grading, vars::Vector{Variable})
     return action
 end
 
+"""
+    scaling_symmetries(F::System; in_hnf::Bool=true)
+
+Given a polynomial system `F` returns the group of scaling symmetries 
+of the polynomial system `F` that fix the parameters.
+
+```julia-repl
+julia> @var x[1:2] p[1:2]
+(Variable[x₁, x₂], Variable[p₁, p₂])
+
+julia> F = System([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; variables=x, parameters=p)
+System of length 2
+ 2 variables: x₁, x₂
+ 2 parameters: p₁, p₂
+
+ -p₁ + x₁^2 - x₂^2
+ -p₂ + 2*x₂*x₁
+
+julia> scalings = scaling_symmetries(F)
+
+```
+"""
 function scaling_symmetries(F::System; in_hnf::Bool=true)::ScalingSymmetryGroup
     s, U = _snf_scaling_symmetries(F)
     if length(s) == 0
@@ -460,6 +488,19 @@ function symmetries_fixing_parameters_dense!(
     return DeckTransformationGroup(symmetries, F)
 end
 
+function _verify_commutativity(F::SampledSystem, scaling::Tuple{Int, Vector{Int}})
+
+end
+
+# TODO: what about vars?
+function _verify_commutativity(F::SampledSystem, grading::Grading)
+    final_grading = Grading([])
+    for (sᵢ, Uᵢ) in grading
+        if sᵢ == 0 continue end
+
+    end
+end
+
 function symmetries_fixing_parameters!(
     F::SampledSystem;
     degree_bound::Int=1,
@@ -472,7 +513,7 @@ function symmetries_fixing_parameters!(
     end
 
     scalings = param_dep ? scaling_symmetries(F) : scaling_symmetries(F, unknowns(F))
-    # TODO: Verify, if finite scalings commute
+    # TODO: Verify, if finite scalings commute; is it enough to verify for 1 generic parameter?
     if length(scalings.grading) == 0
         return symmetries_fixing_parameters_dense!(
             F;
@@ -481,10 +522,6 @@ function symmetries_fixing_parameters!(
             tol=tol
         )
     else
-        println("Found non-trivial grading:")
-        for (sᵢ, Uᵢ) in scalings.grading
-            printstyled(size(Uᵢ, 1), " scalings of order ", sᵢ, "\n", color=:green)
-        end
         printstyled("Running graded version...\n", color=:green)
         return symmetries_fixing_parameters_graded!(
             F,
@@ -495,7 +532,7 @@ function symmetries_fixing_parameters!(
     end
 end
 
-function symmetries_fixing_parameters(  # TODO: extend to take unknowns arg
+function symmetries_fixing_parameters(  # TODO: extend to take a rational map
     F::System,
     (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}};
     degree_bound::Int=1,
@@ -534,7 +571,7 @@ System of length 2
  -p₁ + x₁^2 - x₂^2
  -p₂ + 2*x₂*x₁
 
-julia> deck = symmetries_fixing_parameters(F, degree_bound=1, param_dep=false)
+julia> deck = symmetries_fixing_parameters(F; param_dep=false)
 
 ```
 """

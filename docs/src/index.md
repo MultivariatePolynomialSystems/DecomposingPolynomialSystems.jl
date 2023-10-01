@@ -1,8 +1,6 @@
-# DecomposingPolynomialsSystems.jl
-*The best package for simplifying systems of polynomial equations.*
+# Introduction
+*DecomposingPolynomialSystems.jl is a Julia package for decomposing systems of polynomial equations, i.e. representing a possibly complicated polynomial system as a sequence of simpler polynomial subsystems.*
+
 ## Package Features
 - Computing symmetries that fix the parameters of the polynomial system
-## Function Documentation
-```@docs
-symmetries_fixing_parameters
-```
+- Computing invariants... 

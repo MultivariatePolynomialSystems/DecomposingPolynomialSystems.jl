@@ -12,11 +12,13 @@ struct MonomialVector
 end
 
 # TODO: think about other ways to represent samples
+# TODO: make pretty printing
 struct VarietySamples
     solutions::Array{CC, 3} # n_unknowns x n_sols x n_instances
     parameters::Array{CC, 2} # n_params x n_instances
 end
 
+# TODO: make pretty printing
 mutable struct SampledSystem
     const system::System
     samples::VarietySamples
@@ -55,6 +57,20 @@ function SampledSystem(F::System, MR::MonodromyResult)
         block_partitions,
         symmetry_permutations
     )
+end
+
+function Base.show(io::IO, F::SampledSystem)
+    sols = F.samples.solutions
+    n_samples = size(sols, 2)*size(sols, 3)
+    println(io, "SampledSystem with $(n_samples) samples")
+    print(io, " $(n_unknowns(F)) unknowns: ", join(unknowns(F), ", "))
+    if !isempty(parameters(F))
+        print(io, "\n $(n_parameters(F)) parameters: ", join(parameters(F), ", "))
+    end
+    print(io, "\n\n")
+    println(io, " number of solutions: $(size(sols, 2))")
+    println(io, " number of instances: $(size(sols, 3))")
+    print(io, " number of symmetry permutations: $(length(F.symmetry_permutations))")
 end
 
 unknowns(F::SampledSystem) = F.system.variables
@@ -173,7 +189,7 @@ function sample_system!(F::SampledSystem, n_instances::Int)
         all_sols = cat(F.samples.solutions, solutions, dims=3)
         all_params = cat(F.samples.parameters, parameters, dims=2)
 
-        F.samples.solutions, F.samples.parameters = all_sols, all_params
+        F.samples = VarietySamples(all_sols, all_params)
     end
 
     return Vector((n_computed_instances+1):n_instances)

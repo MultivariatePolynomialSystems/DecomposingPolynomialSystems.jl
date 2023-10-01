@@ -14,7 +14,7 @@ makedocs(
             "SampledSystem" => "Types/sampled_system.md",
             "SymmetryGroup" => "Types/symmetry_group.md",
         ],
-        "Simplifying Polynomial Systems" => [
+        "Decomposing Polynomial Systems" => [
             "Symmetries" => "SPS/symmetries.md",
             "Invariants" => "SPS/invariants.md",
         ],
