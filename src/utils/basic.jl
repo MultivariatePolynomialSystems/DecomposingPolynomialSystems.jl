@@ -53,3 +53,19 @@ end
 function eye(T, n)
     return Matrix{T}(I(n))
 end
+
+function int2str(n::Int)::String
+    if mod(n, 10) == 1
+        mod(n, 100) == 11 && return "$(n)th"
+        return "$(n)st"
+    end
+    if mod(n, 10) == 2
+        mod(n, 100) == 12 && return "$(n)th"
+        return "$(n)nd"
+    end
+    if mod(n, 10) == 3
+        mod(n, 100) == 13 && return "$(n)th"
+        return "$(n)rd"
+    end
+    return "$(n)th"
+end

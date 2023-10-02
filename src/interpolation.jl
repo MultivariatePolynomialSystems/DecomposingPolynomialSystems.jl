@@ -24,12 +24,21 @@ function multidegrees_from_total_degree(md::Multidegree, n::Int, d::Int)::Vector
     return mds
 end
 
+function multidegrees_from_total_degree(n::Int, d::Int)::Vector{Multidegree}
+    return multidegrees_from_total_degree(Multidegree([]), n, d)
+end
+
 function multidegrees_up_to_total_degree(n::Int, d::Int)::Vector{Multidegree}
     mds = Vector{Multidegree}([])
     for i in 0:d
-        append!(mds, multidegrees_from_total_degree(Multidegree([]), n, i))
+        append!(mds, multidegrees_from_total_degree(n, i))
     end
     return mds
+end
+
+function monomials(vars::Vector{Variable}, d::Int; homogeneous::Bool=false)::MonomialVector
+    homogeneous && return MonomialVector(multidegrees_from_total_degree(length(vars), d), vars)
+    return MonomialVector(multidegrees_up_to_total_degree(length(vars), d), vars)
 end
 
 function degree_wrt_grading(md::Multidegree, grading::Grading)::Vector{Int}

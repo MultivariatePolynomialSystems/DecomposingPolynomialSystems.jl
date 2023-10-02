@@ -11,6 +11,8 @@ struct MonomialVector
     vars::Vector{Variable}
 end
 
+Base.length(mons::MonomialVector) = length(mons.mds)
+
 # TODO: think about other ways to represent samples
 # TODO: make pretty printing
 struct VarietySamples
@@ -101,7 +103,7 @@ end
 function run_monodromy(F::System; options...)::SampledSystem
     MR = monodromy_solve(F; permutations=true, options...)
     if length(solutions(MR)) == 1
-        error("Just one solution was found, no monodromy group available. Try running again")
+        error("Just one solution was found, no monodromy group available. Try running again...")
     end
     return SampledSystem(F, MR)
 end
@@ -109,7 +111,7 @@ end
 function run_monodromy(F::System, (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}}; options...)::SampledSystem
     MR = monodromy_solve(F, [x₀], p₀; permutations=true, options...)
     if length(solutions(MR)) == 1
-        error("No additional solutions were found, no monodromy group available. Try running again")
+        error("No additional solutions were found, no monodromy group available. Try running again...")
     end
     return SampledSystem(F, MR)
 end
@@ -218,7 +220,6 @@ function evaluate_monomials_at_samples(mons::MonomialVector, samples::VarietySam
     return evaluated_mons
 end
 
-# supposes each md in mds is a multidegree in both unknowns and parameters
 # TODO: consider view for slices
 function evaluate_monomials_at_samples_(mons::MonomialVector, samples::VarietySamples)::Array{CC, 3}
     solutions = samples.solutions

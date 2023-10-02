@@ -18,13 +18,23 @@ To get back to the Julia REPL, press backspace.
 using DecomposingPolynomialSystems
 @var x[1:2] p[1:2]
 F = System([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; variables=x, parameters=p)
-deck = symmetries_fixing_parameters(F, param_dep=false)
+symmetries_fixing_parameters(F; degree_bound=1, param_dep=false)
 ```
-The object `deck` is a `DeckTransformationGroup` structure that contains 4 deck transformations acting on the unknowns `x₁`, `x₂` of the polynomial system `F`:
+The result of the last command is an object of type `DeckTransformationGroup` that contains 4 deck transformations acting on the unknowns `x₁`, `x₂` of the polynomial system `F`:
 ```
-4-element Vector{Vector{Union{Nothing, Expression}}}:
- [x₁, x₂]
- [(0.0 - 1.0*im)*x₂, (0.0 + 1.0*im)*x₁]
- [(-1.0 + 0.0*im)*x₁, (-1.0 + 0.0*im)*x₂]
- [(0.0 + 1.0*im)*x₂, (0.0 - 1.0*im)*x₁]
+DeckTransformationGroup of order 4
+ structure: C2 x C2
+ action:
+  1st map:
+   x₁ ↦ x₁
+   x₂ ↦ x₂
+  2nd map:
+   x₁ ↦ (0.0 + 1.0*im)*x₂
+   x₂ ↦ (0.0 - 1.0*im)*x₁
+  3rd map:
+   x₁ ↦ (0.0 - 1.0*im)*x₂
+   x₂ ↦ (0.0 + 1.0*im)*x₁
+  4th map:
+   x₁ ↦ (-1.0 + 0.0*im)*x₁
+   x₂ ↦ (-1.0 + 0.0*im)*x₂
 ```

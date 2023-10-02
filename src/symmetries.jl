@@ -19,8 +19,8 @@ struct DeckTransformationGroup
 end
 
 function DeckTransformationGroup(F::SampledSystem)
-    action = [Dict(zip(unknowns(F), Expression.(unknowns(F))))]  # TODO: Is conversion needed?
-    return DeckTransformationGroup(action, group_structure(F.symmetry_permutations), F)
+    symmetries = _init_symmetries(length(F.symmetry_permutations), unknowns(F))
+    return DeckTransformationGroup(symmetries, F)
 end
 
 function DeckTransformationGroup(
@@ -32,9 +32,15 @@ function DeckTransformationGroup(
 end
 
 function Base.show(io::IO, deck::DeckTransformationGroup)
-    println(io, "DeckTransformationGroup")
-    print(io, " structure: ", deck.structure)
-    
+    println(io, "DeckTransformationGroup of order $(length(deck.action))")
+    println(io, " structure: ", deck.structure)
+    println(io, " action:")
+    for i in eachindex(deck.action)
+        println(io, "  ", int2str(i), " map:")
+        for (j, (var, expr)) in enumerate(deck.action[i])
+            println(io, "   ", var, " ↦ ", expr)
+        end
+    end
 end
 
 # TODO: make pretty printing
@@ -318,7 +324,7 @@ function _interpolate_symmetry_function(
     permutation::Vector{Int},
     values::SubArray{CC, 2},
     eval_mons::Array{CC, 3},
-    mons::Vector{Expression},
+    mons::MonomialVector,
     tol::Float64;
     logging::Bool=false
 )
@@ -431,25 +437,18 @@ function symmetries_fixing_parameters_dense!(
 
     n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
     vars = param_dep ? variables(F) : unknowns(F)  # vars --> interp_vars?
-    n_vars = length(vars)
 
     C = F.symmetry_permutations
     symmetries = _init_symmetries(length(C), unknowns(F))
 
-    mons = Expression.([1])
-
     for d in 1:degree_bound
         printstyled("Started interpolation for degree = ", d, "...\n", color=:green)
+        mons = monomials(vars, d)
+        n_instances = Int(ceil(2/n_sols*length(mons)))
+        sample_system!(F, n_instances)
 
-        new_n_instances = Int(ceil(2/n_sols*num_mons_upto(n_vars, d)))
-        new_mons = next_deg_mons(vars, mons, d)
-        
-        sample_system!(F, new_n_instances)
-        # append!(mons, new_mons)
-        prepend!(mons, new_mons)
-
-        println("Evaluating new monomials...\n")
-        evaluated_mons = evaluate_monomials_at_samples(mons, F.samples, vars) # TODO: optimize
+        println("Evaluating monomials...\n")
+        evaluated_mons = evaluate_monomials_at_samples_(mons, F.samples) # TODO: optimize
         
         for i in 2:length(C)  # skip the identity permutation
             printstyled("Interpolating the ", i, "-th symmetry map...\n", color=:blue)
