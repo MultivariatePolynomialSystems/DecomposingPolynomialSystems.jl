@@ -1,7 +1,7 @@
 include("interpolation.jl")
 
 export DeckTransformationGroup, ScalingSymmetryGroup
-export scaling_symmetries
+export scaling_symmetries, _verify_commutativity
 export symmetries_fixing_parameters_dense!, symmetries_fixing_parameters_graded!
 export symmetries_fixing_parameters!, symmetries_fixing_parameters
 
@@ -19,7 +19,7 @@ struct DeckTransformationGroup
 end
 
 function DeckTransformationGroup(F::SampledSystem)
-    symmetries = _init_symmetries(length(F.symmetry_permutations), unknowns(F))
+    symmetries = _init_symmetries(length(F.deck_permutations), unknowns(F))
     return DeckTransformationGroup(symmetries, F)
 end
 
@@ -28,17 +28,18 @@ function DeckTransformationGroup(
     F::SampledSystem
 )
     action = [Dict(zip(unknowns(F), symmetry)) for symmetry in symmetries]
-    return DeckTransformationGroup(action, group_structure(F.symmetry_permutations), F)
+    return DeckTransformationGroup(action, group_structure(F.deck_permutations), F)
 end
 
 function Base.show(io::IO, deck::DeckTransformationGroup)
     println(io, "DeckTransformationGroup of order $(length(deck.action))")
     println(io, " structure: ", deck.structure)
-    println(io, " action:")
+    print(io, " action:")
     for i in eachindex(deck.action)
-        println(io, "  ", int2str(i), " map:")
+        println(io, "\n  ", int2str(i), " map:")
         for (j, (var, expr)) in enumerate(deck.action[i])
-            println(io, "   ", var, " ↦ ", expr)
+            print(io, "   ", var, " ↦ ", expr)
+            j < length(deck.action[i]) && print(io, "\n")
         end
     end
 end
@@ -51,7 +52,43 @@ struct ScalingSymmetryGroup
 end
 
 ScalingSymmetryGroup() = ScalingSymmetryGroup([], [], [])
+
+function ScalingSymmetryGroup(grading::Grading, vars::Vector{Variable})
+    action = Vector{Tuple{Int, Dict{Variable, Expression}}}([])
+    k = 0
+    for (sᵢ, Uᵢ) in grading
+        n_scalings = size(Uᵢ, 1)
+        @var λ[(k+1):(n_scalings+k)]
+        for j in 1:n_scalings
+            nonzero_ids = findall(!iszero, Uᵢ[j, :])
+            vals = (λ[j].^Uᵢ[j, :][nonzero_ids]).*vars[nonzero_ids]
+            push!(action, (sᵢ, Dict(zip(vars[nonzero_ids], vals))))
+        end
+        k += n_scalings
+    end
+    return ScalingSymmetryGroup(grading, vars, action)
+end
+
 Base.copy(s::ScalingSymmetryGroup) = ScalingSymmetryGroup(s.grading, s.vars, s.action)
+
+function Base.show(io::IO, scalings::ScalingSymmetryGroup)
+    n_infinite, n_finite = 0, 0
+    for (sᵢ, Uᵢ) in scalings.grading
+        if sᵢ == 0
+            n_infinite = size(Uᵢ, 1)
+        else
+            n_finite += size(Uᵢ, 1)
+        end
+    end
+    println(io, "ScalingSymmetryGroup with $(n_infinite+n_finite) scalings")
+    println(io, " infinite scalings: $(n_infinite)")
+    println(io, " finite scalings:")
+    for (i, (sᵢ, Uᵢ)) in enumerate(scalings.grading)
+        if sᵢ == 0 continue end
+        println(io, "  $(size(Uᵢ, 1)) of order $(sᵢ)")
+    end
+    print(io, " vars: ", join(scalings.vars, ", "))
+end
 
 function _mat2col_diffs(M)
     M = M - M[:,1]*ones(eltype(M), 1, size(M,2))
@@ -92,22 +129,6 @@ function _hnf_reduce!(grading::Grading)
     end
 end
 
-function _to_expressions(grading::Grading, vars::Vector{Variable})
-    action = Vector{Tuple{Int, Dict{Variable, Expression}}}([])
-    k = 0
-    for (sᵢ, Uᵢ) in grading
-        n_scalings = size(Uᵢ, 1)
-        @var λ[(k+1):(n_scalings+k)]
-        for j in 1:n_scalings
-            nonzero_ids = findall(!iszero, Uᵢ[j, :])
-            vals = (λ[j].^Uᵢ[j, :][nonzero_ids]).*vars[nonzero_ids]
-            push!(action, (sᵢ, Dict(zip(vars[nonzero_ids], vals))))
-        end
-        k += n_scalings
-    end
-    return action
-end
-
 """
     scaling_symmetries(F::System; in_hnf::Bool=true)
 
@@ -138,8 +159,7 @@ function scaling_symmetries(F::System; in_hnf::Bool=true)::ScalingSymmetryGroup
     grading = collect(zip(s, U))
     if in_hnf _hnf_reduce!(grading) end
     vars = vcat(F.variables, F.parameters)
-    action = _to_expressions(grading, vars)
-    return ScalingSymmetryGroup(grading, vars, action)
+    return ScalingSymmetryGroup(grading, vars)
 end
 
 function scaling_symmetries(F::SampledSystem; in_hnf::Bool=true)::ScalingSymmetryGroup
@@ -182,8 +202,7 @@ function scaling_symmetries(F::System, vars::Vector{Variable})::ScalingSymmetryG
     grading = collect(zip(s, U))
     _hnf_reduce!(grading)
     grading = _remove_dependencies(_remove_zero_rows(grading))
-    action = _to_expressions(grading, vars)
-    return ScalingSymmetryGroup(grading, vars, action)
+    return ScalingSymmetryGroup(grading, vars)
 end
 
 function scaling_symmetries(F::SampledSystem, vars::Vector{Variable})::ScalingSymmetryGroup
@@ -275,10 +294,7 @@ function _all_interpolated(symmetries::Vector{Vector{NoExpression}})::Bool
             break
         end
     end
-    if all_interpolated
-        return true
-    end
-    return false
+    return all_interpolated
 end
 
 function _init_symmetries(n_symmetries::Int, unknowns::Vector{Variable})::Vector{Vector{NoExpression}}
@@ -353,7 +369,7 @@ function symmetries_fixing_parameters_graded!(
     n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
     n_instances = Int(ceil(2/n_sols*max_n_mons))
 
-    C = F.symmetry_permutations
+    C = F.deck_permutations
     symmetries = _init_symmetries(length(C), unknowns(F))
 
     sample_system!(F, n_instances)
@@ -438,7 +454,7 @@ function symmetries_fixing_parameters_dense!(
     n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
     vars = param_dep ? variables(F) : unknowns(F)  # vars --> interp_vars?
 
-    C = F.symmetry_permutations
+    C = F.deck_permutations
     symmetries = _init_symmetries(length(C), unknowns(F))
 
     for d in 1:degree_bound
@@ -448,11 +464,10 @@ function symmetries_fixing_parameters_dense!(
         sample_system!(F, n_instances)
 
         println("Evaluating monomials...\n")
-        evaluated_mons = evaluate_monomials_at_samples_(mons, F.samples) # TODO: optimize
+        evaluated_mons = evaluate_monomials_at_samples_(mons, F.samples)
         
-        for i in 2:length(C)  # skip the identity permutation
+        for (i, symmetry) in enumerate(symmetries)
             printstyled("Interpolating the ", i, "-th symmetry map...\n", color=:blue)
-            symmetry = symmetries[i]
             for j in 1:n_unknowns
                 if isnothing(symmetry[j])
                     symmetry[j] = _interpolate_symmetry_function(
@@ -487,17 +502,53 @@ function symmetries_fixing_parameters_dense!(
     return DeckTransformationGroup(symmetries, F)
 end
 
-function _verify_commutativity(F::SampledSystem, scaling::Tuple{Int, Vector{Int}})
-
+function to_CC(scaling::Tuple{Int, Vector{Int}})::Vector{CC}
+    return [exp(2*pi*im*k/scaling[1]) for k in scaling[2]]
 end
 
-# TODO: what about vars?
-function _verify_commutativity(F::SampledSystem, grading::Grading)
+function find_solution_id(sol::Vector{CC}, sols::Matrix{CC}, tol::Float64)
+    return findfirst(x->norm(x-sol)<tol, M2VV(sols))
+end
+
+# verify for all of the solutions in 1 instance
+function _all_deck_commute(F::SampledSystem, scaling::Tuple{Int, Vector{Int}}; tol::Float64=1e-5)::Bool
+    instance_id = rand(1:size(F.samples.solutions, 3))
+    sols1 = F.samples.solutions[:, :, instance_id]
+    params1 = F.samples.parameters[:, instance_id]
+    params2 = to_CC(scaling)[end-n_parameters(F)+1:end].*params1
+    sample_system!(F, params2)
+    sols2 = F.samples.solutions[:, :, end]
+    for perm in F.deck_permutations
+        for i in axes(sols1, 2)
+            Φ_sol = to_CC(scaling)[1:n_unknowns(F)].*sols1[:, i]
+            id = find_solution_id(Φ_sol, sols2, tol)
+            ΨΦ_sol = sols2[:, perm[id]]
+            Ψ_sol = sols1[:, perm[i]]
+            ΦΨ_sol = to_CC(scaling)[1:n_unknowns(F)].*Ψ_sol
+            if norm(ΨΦ_sol-ΦΨ_sol)>tol return false end
+        end
+    end
+    return true
+end
+
+function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingSymmetryGroup)
     final_grading = Grading([])
     for (sᵢ, Uᵢ) in grading
-        if sᵢ == 0 continue end
-
+        if sᵢ == 0 
+            push!(final_grading, (sᵢ, Uᵢ))
+            continue
+        end
+        Vᵢ = Array{Int}(undef, 0, size(Uᵢ, 2))
+        for j in axes(Uᵢ, 1)
+            if _all_deck_commute(F, (sᵢ, Uᵢ[j, :]))
+                Vᵢ = [Vᵢ; V2Mt(Uᵢ[j, :])]
+            end
+        end
+        if size(Vᵢ, 1) > 0
+            push!(final_grading, (sᵢ, Vᵢ))
+        end
     end
+    return ScalingSymmetryGroup(final_grading, scalings.vars, scalings.action)
 end
 
 function symmetries_fixing_parameters!(
@@ -507,10 +558,11 @@ function symmetries_fixing_parameters!(
     tol::Float64=1e-5
 )::DeckTransformationGroup
 
-    if length(F.symmetry_permutations) == 1 # trivial group of symmetries
+    if length(F.deck_permutations) == 1 # trivial group of symmetries
         return DeckTransformationGroup(F) # return the identity group
     end
 
+    scalings = _verify_commutativity()
     scalings = param_dep ? scaling_symmetries(F) : scaling_symmetries(F, unknowns(F))
     # TODO: Verify, if finite scalings commute; is it enough to verify for 1 generic parameter?
     if length(scalings.grading) == 0
