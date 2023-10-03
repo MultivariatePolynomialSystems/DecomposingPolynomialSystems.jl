@@ -190,19 +190,20 @@ function _remove_dependencies(grading::Grading)::Grading
     return grading
 end
 
-# TODO: what if vars is not a subset of Fvars?
-function scaling_symmetries(F::System, vars::Vector{Variable})::ScalingSymmetryGroup
-    Fvars = vcat(F.variables, F.parameters)
-    idx = [findfirst(v->v==var, Fvars) for var in vars]
-    s, U = _snf_scaling_symmetries(F)
-    if length(s) == 0
-        return ScalingSymmetryGroup()
+# TODO: what if vars is not a subset of scalings.vars?
+function _restrict_scalings(scalings::ScalingSymmetryGroup, vars::Vector{Variable})::ScalingSymmetryGroup
+    idx = [findfirst(v->v==var, scalings.vars) for var in vars]
+    restr_grading = copy(scalings.grading)
+    for (i, (sᵢ, Uᵢ)) in enumerate(scalings.grading)
+        restr_grading[i] = (sᵢ, Uᵢ[:, idx])
     end
-    U = [u[:, idx] for u in U]
-    grading = collect(zip(s, U))
-    _hnf_reduce!(grading)
-    grading = _remove_dependencies(_remove_zero_rows(grading))
-    return ScalingSymmetryGroup(grading, vars)
+    _hnf_reduce!(restr_grading)
+    restr_grading = _remove_dependencies(_remove_zero_rows(restr_grading))
+    return ScalingSymmetryGroup(restr_grading, vars)
+end
+
+function scaling_symmetries(F::System, vars::Vector{Variable})::ScalingSymmetryGroup
+    return _restrict_scalings(scaling_symmetries(F), vars)
 end
 
 function scaling_symmetries(F::SampledSystem, vars::Vector{Variable})::ScalingSymmetryGroup
@@ -418,7 +419,6 @@ function symmetries_fixing_parameters_graded!(
 
         if _all_interpolated(symmetries)
             printstyled("--- All symmetries are interpolated ---\n", color=:blue)
-            # printstyled("Number of processed classes: ", m, " out of ", length(classes), "\n", color=:blue)
             return DeckTransformationGroup(symmetries, F)
         end
     end
@@ -452,7 +452,7 @@ function symmetries_fixing_parameters_dense!(
 )::DeckTransformationGroup
 
     n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
-    vars = param_dep ? variables(F) : unknowns(F)  # vars --> interp_vars?
+    vars = param_dep ? variables(F) : unknowns(F)  # rename vars --> interp_vars?
 
     C = F.deck_permutations
     symmetries = _init_symmetries(length(C), unknowns(F))
@@ -533,8 +533,8 @@ end
 
 function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingSymmetryGroup)
     final_grading = Grading([])
-    for (sᵢ, Uᵢ) in grading
-        if sᵢ == 0 
+    for (sᵢ, Uᵢ) in scalings.grading
+        if sᵢ == 0
             push!(final_grading, (sᵢ, Uᵢ))
             continue
         end
@@ -548,7 +548,7 @@ function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingSymmet
             push!(final_grading, (sᵢ, Vᵢ))
         end
     end
-    return ScalingSymmetryGroup(final_grading, scalings.vars, scalings.action)
+    return ScalingSymmetryGroup(final_grading, scalings.vars)
 end
 
 function symmetries_fixing_parameters!(
@@ -562,9 +562,8 @@ function symmetries_fixing_parameters!(
         return DeckTransformationGroup(F) # return the identity group
     end
 
-    scalings = _verify_commutativity()
-    scalings = param_dep ? scaling_symmetries(F) : scaling_symmetries(F, unknowns(F))
-    # TODO: Verify, if finite scalings commute; is it enough to verify for 1 generic parameter?
+    scalings = _scalings_commuting_with_deck(F, scaling_symmetries(F))
+    scalings = param_dep ? scalings : _restrict_scalings(scalings, unknowns(F))
     if length(scalings.grading) == 0
         return symmetries_fixing_parameters_dense!(
             F;

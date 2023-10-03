@@ -6,11 +6,7 @@ F = System([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; variables=x, parameters
 F = run_monodromy(F)
 DeckTransformationGroup(F)
 
-scalings = scaling_symmetries(F)
-
-_verify_commutativity(F, scalings.grading)
-
-symmetries_fixing_parameters_dense!(F; degree_bound=1, param_dep=false)
+symmetries_fixing_parameters!(F; degree_bound=1, param_dep=false)
 
 scalings = scaling_symmetries(F, x)
 scalings.grading[1]
