@@ -148,7 +148,11 @@ System of length 2
  -p₂ + 2*x₂*x₁
 
 julia> scalings = scaling_symmetries(F)
-
+ScalingSymmetryGroup with 2 scalings
+ infinite scalings: 1
+ finite scalings:
+  1 of order 2
+ vars: x₁, x₂, p₁, p₂
 ```
 """
 function scaling_symmetries(F::System; in_hnf::Bool=true)::ScalingSymmetryGroup
@@ -364,6 +368,7 @@ function symmetries_fixing_parameters_graded!(
     mds::Vector{Multidegree},
     classes::Dict{Vector{Int}, Vector{Int}};
     tol::Float64=1e-5,
+    logging::Bool=false
 )::DeckTransformationGroup
     
     max_n_mons = max(length.(collect(values(classes)))...)  # size of the largest class
@@ -398,18 +403,19 @@ function symmetries_fixing_parameters_graded!(
                                 eval_denom_mons,
                                 num_mons,
                                 denom_mons,
-                                tol
+                                tol;
+                                logging=logging
                             )
                             if !isnothing(symmetry[i])
-                                printstyled(
+                                logging && printstyled(
                                     "Good representative for the ",
-                                    j,
-                                    "-th symmetry, variable ",
+                                    int2str(j),
+                                    " symmetry, variable ",
                                     unknowns(F)[i],
                                     ":\n",
                                     color=:red
                                 )
-                                println(symmetry[i])
+                                logging && println(symmetry[i])
                             end
                         end
                     end
@@ -418,7 +424,7 @@ function symmetries_fixing_parameters_graded!(
         end
 
         if _all_interpolated(symmetries)
-            printstyled("--- All symmetries are interpolated ---\n", color=:blue)
+            logging && printstyled("--- All symmetries are interpolated ---\n", color=:blue)
             return DeckTransformationGroup(symmetries, F)
         end
     end
@@ -431,6 +437,7 @@ function symmetries_fixing_parameters_graded!(
     scalings::ScalingSymmetryGroup;
     degree_bound::Int=1,
     tol::Float64=1e-5,
+    logging::Bool=false
 )::DeckTransformationGroup
 
     mds = multidegrees_up_to_total_degree(length(scalings.vars), degree_bound)
@@ -440,7 +447,8 @@ function symmetries_fixing_parameters_graded!(
         scalings,
         mds,
         classes;
-        tol=tol
+        tol=tol,
+        logging=logging
     )
 end
 
@@ -448,7 +456,8 @@ function symmetries_fixing_parameters_dense!(
     F::SampledSystem; 
     degree_bound::Int=1,
     param_dep::Bool=true,
-    tol::Float64=1e-5
+    tol::Float64=1e-5,
+    logging::Bool=false
 )::DeckTransformationGroup
 
     n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
@@ -458,16 +467,16 @@ function symmetries_fixing_parameters_dense!(
     symmetries = _init_symmetries(length(C), unknowns(F))
 
     for d in 1:degree_bound
-        printstyled("Started interpolation for degree = ", d, "...\n", color=:green)
+        logging && printstyled("Started interpolation for degree = ", d, "...\n", color=:green)
         mons = monomials(vars, d)
         n_instances = Int(ceil(2/n_sols*length(mons)))
         sample_system!(F, n_instances)
 
-        println("Evaluating monomials...\n")
+        logging && println("Evaluating monomials...\n")
         evaluated_mons = evaluate_monomials_at_samples_(mons, F.samples)
         
         for (i, symmetry) in enumerate(symmetries)
-            printstyled("Interpolating the ", i, "-th symmetry map...\n", color=:blue)
+            logging && printstyled("Interpolating the ", i, "-th symmetry map...\n", color=:blue)
             for j in 1:n_unknowns
                 if isnothing(symmetry[j])
                     symmetry[j] = _interpolate_symmetry_function(
@@ -476,10 +485,10 @@ function symmetries_fixing_parameters_dense!(
                         evaluated_mons,
                         mons,
                         tol;
-                        logging=true
+                        logging=logging
                     )
                     if !isnothing(symmetry[j])
-                        printstyled(
+                        logging && printstyled(
                             "Good representative for the ",
                             i,
                             "-th symmetry, variable ",
@@ -487,14 +496,14 @@ function symmetries_fixing_parameters_dense!(
                             ":\n",
                             color=:red
                         )
-                        println(symmetry[j])
+                        logging && println(symmetry[j])
                     end
                 end
             end
         end
     
         if _all_interpolated(symmetries)
-            printstyled("--- All symmetries are interpolated ---\n", color=:blue)
+            logging && printstyled("--- All symmetries are interpolated ---\n", color=:blue)
             return DeckTransformationGroup(symmetries, F)
         end
     end
@@ -555,7 +564,8 @@ function symmetries_fixing_parameters!(
     F::SampledSystem;
     degree_bound::Int=1,
     param_dep::Bool=true,
-    tol::Float64=1e-5
+    tol::Float64=1e-5,
+    logging::Bool=false
 )::DeckTransformationGroup
 
     if length(F.deck_permutations) == 1 # trivial group of symmetries
@@ -569,15 +579,17 @@ function symmetries_fixing_parameters!(
             F;
             degree_bound=degree_bound,
             param_dep=param_dep,
-            tol=tol
+            tol=tol,
+            logging=logging
         )
     else
-        printstyled("Running graded version...\n", color=:green)
+        logging && printstyled("Running graded version...\n", color=:green)
         return symmetries_fixing_parameters_graded!(
             F,
             scalings;
             degree_bound=degree_bound,
-            tol=tol
+            tol=tol,
+            logging=logging
         )
     end
 end
@@ -588,7 +600,8 @@ function symmetries_fixing_parameters(  # TODO: extend to take a rational map
     degree_bound::Int=1,
     param_dep::Bool=true,
     tol::Float64=1e-5,
-    monodromy_options::Tuple=()
+    monodromy_options::Tuple=(),
+    logging::Bool=false
 )::DeckTransformationGroup
 
     F = run_monodromy(F, (x₀, p₀); monodromy_options...)
@@ -596,7 +609,8 @@ function symmetries_fixing_parameters(  # TODO: extend to take a rational map
         F;
         degree_bound=degree_bound,
         param_dep=param_dep,
-        tol=tol
+        tol=tol,
+        logging=logging
     )
 end
 
@@ -621,24 +635,40 @@ System of length 2
  -p₁ + x₁^2 - x₂^2
  -p₂ + 2*x₂*x₁
 
-julia> deck = symmetries_fixing_parameters(F; param_dep=false)
-
+julia> symmetries_fixing_parameters(F; degree_bound=1, param_dep=false)
+DeckTransformationGroup of order 4
+ structure: C2 x C2
+ action:
+  1st map:
+   x₁ ↦ x₁
+   x₂ ↦ x₂
+  2nd map:
+   x₁ ↦ (0.0 + 1.0*im)*x₂
+   x₂ ↦ (0.0 - 1.0*im)*x₁
+  3rd map:
+   x₁ ↦ (-1.0 + 0.0*im)*x₁
+   x₂ ↦ (-1.0 + 0.0*im)*x₂
+  4th map:
+   x₁ ↦ (0.0 - 1.0*im)*x₂
+   x₂ ↦ (0.0 + 1.0*im)*x₁
 ```
 """
 function symmetries_fixing_parameters(  # TODO: extend to take a rational map
     F::System;
     degree_bound::Int=1,
-    tol::Float64=1e-5,
     param_dep::Bool=true,
-    monodromy_options::Tuple=()
+    tol::Float64=1e-5,
+    monodromy_options::Tuple=(),
+    logging::Bool=false
 )::DeckTransformationGroup
 
     F = run_monodromy(F; monodromy_options...)
     return symmetries_fixing_parameters!(
         F;
         degree_bound=degree_bound,
+        param_dep=param_dep,
         tol=tol,
-        param_dep=param_dep
+        logging=logging
     )
 end
 
