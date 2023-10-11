@@ -10,7 +10,7 @@ function p2a(M)
     return Ma[1:end-1,:]
 end
 
-function M2V(M::Array)
+function M2V(M)
     return M[:]
 end
 
@@ -54,7 +54,7 @@ function eye(T, n)
     return Matrix{T}(I(n))
 end
 
-function int2str(n::Int)::String
+function to_ordinal(n::Integer)::String
     if mod(n, 10) == 1
         mod(n, 100) == 11 && return "$(n)th"
         return "$(n)st"
@@ -68,4 +68,32 @@ function int2str(n::Int)::String
         return "$(n)rd"
     end
     return "$(n)th"
+end
+
+function subscriptnumber(i::Integer)
+    if i < 0
+        c = [Char(0x208B)]
+    else
+        c = []
+    end
+    for d in reverse(digits(abs(i)))
+        push!(c, Char(0x2080+d))
+    end
+    return join(c)
+end
+
+function superscriptnumber(i::Integer)
+    if i < 0
+        c = [Char(0x207B)]
+    else
+        c = []
+    end
+    for d in reverse(digits(abs(i)))
+        if d == 0 push!(c, Char(0x2070)) end
+        if d == 1 push!(c, Char(0x00B9)) end
+        if d == 2 push!(c, Char(0x00B2)) end
+        if d == 3 push!(c, Char(0x00B3)) end
+        if d > 3 push!(c, Char(0x2070+d)) end
+    end
+    return join(c)
 end

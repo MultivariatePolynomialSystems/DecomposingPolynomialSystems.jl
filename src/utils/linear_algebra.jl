@@ -1,5 +1,6 @@
-using HomotopyContinuation: Expression, Variable
-export q2R, c2R, exprDet, sparsify, num_mons, num_mons_upto, get_monomials, get_monomials_fixed_degree
+import HomotopyContinuation: Expression, Variable
+export sparsify, num_mons, num_mons_upto, get_monomials, get_monomials_fixed_degree
+export q2R, q2c, c2R, R2c, ct2P, ct2Prad, c2sR, ct2sP, ct2sPrad
 
 function exprDet(M; expnd=true)
     n = size(M, 1)

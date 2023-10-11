@@ -1,43 +1,43 @@
+# using DecomposingPolynomialSystems
+
+# #-----------------------------------------------------------------#
+
+# @var x a b
+# F = System([x^2 + a*x + b]; parameters = [a,b])
+
+# symmetries, Fs = symmetries_fixing_parameters(F; degree=1, param_dep=false)
+
+# #-----------------------------------------------------------------#
+
+# @var x y p
+# F = System([x^2 + x + p, x + y + p]; parameters = [p])
+
+# symmetries, Fs = compute_symmetries(F, degree=1, std_form=true)
+# symmetries.basis
+# symmetries.coefficients
+
+# symmetries = compute_symmetries(F, degree=1)
+# symmetries
+
+# #-----------------------------------------------------------------#
+
+# @var x a b
+# F = System([(x-a)^4+a*(x-a)^3+b*(x-a)^2+a*(x-a)+1]; parameters=[a,b])
+
+#-----------------------------------------------------------------#
+
 using DecomposingPolynomialSystems
-
-#-----------------------------------------------------------------#
-
-@var x a b
-F = System([x^2 + a*x + b]; parameters = [a,b])
-
-symmetries, Fs = symmetries_fixing_parameters(F; degree=1, param_dep=false)
-
-#-----------------------------------------------------------------#
-
-@var x y p
-F = System([x^2 + x + p, x + y + p]; parameters = [p])
-
-symmetries, Fs = compute_symmetries(F, degree=1, std_form=true)
-symmetries.basis
-symmetries.coefficients
-
-symmetries = compute_symmetries(F, degree=1)
-symmetries
-
-#-----------------------------------------------------------------#
-
-@var x a b
-F = System([(x-a)^4+a*(x-a)^3+b*(x-a)^2+a*(x-a)+1]; parameters=[a,b])
-
-#-----------------------------------------------------------------#
-
-using DecomposingPolynomialSystems, HomotopyContinuation
 @var x y z w a b c
 eqs = [2*w^2+1, 2*x+4*w*y+2*a, -3*y^2-z^2+4*a*w*y+2*b, -w*y^3-3*w*y*z^2-a*y^2-a*z^2+2*b*w*y+2*c]
-F = System(eqs; variables=[w,x,y,z], parameters=[a,b,c])
+F = System(eqs; variables=[x,y,z,w], parameters=[a,b,c])
 
-xp0 = HomotopyContinuation.find_start_pair(F)
-F = run_monodromy(F, xp0)
-F.symmetry_permutations
-sample_system!(F, 20)
-F.samples.solutions
-symmetries = compute_symmetries!(F, degree=1, param_dep=false)
-symmetries
+# some scalings jump from one component to another => problem in find_solution_id
+scalings = scaling_symmetries(F)
+scalings.grading[2][2]
+
+F = run_monodromy(F)
+
+symmetries_fixing_parameters!(F; degree_bound=1, param_dep=false)
 
 gr = scaling_symmetries(F)
 gr.U[2]

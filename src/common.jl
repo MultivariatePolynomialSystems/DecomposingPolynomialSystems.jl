@@ -1,10 +1,50 @@
-export SampledSystem, FactorizingMap
+export RationalMap, SampledSystem, FactorizingMap
 export run_monodromy, sample_system!
 export evaluate_monomials_at_samples, evaluate_monomials_at_samples_
 export unknowns, parameters, variables, n_unknowns, n_parameters, n_variables
 
 Multidegree = Vector{Int8} # TODO: is it OK to suppose degrees are < 2^7 = 128?
 Grading = Vector{Tuple{Int, Matrix{Int}}}
+NoExpression = Union{Nothing, Expression}
+
+struct RationalMap
+    domain_vars::Vector{Variable}
+    image_vars::Vector{Variable}
+    funcs::Vector{NoExpression}
+
+    function RationalMap(domain_vars, image_vars, funcs)
+        # TODO: exclude empty vectors, repetitions in vars
+        return new(domain_vars, image_vars, funcs)
+    end
+end
+
+# TODO: what if vars not in funcs? What if funcs has vars not in vars?
+function RationalMap(vars::Vector{Variable}, funcs::Vector{NoExpression})
+    @assert length(vars) == length(funcs) "#vars ≂̸ #funcs, specify image variables"
+    return RationalMap(vars, vars, funcs)
+end
+
+function Base.show(io::IO, map::RationalMap)
+    println(io, "RationalMap: ℂ$(superscriptnumber(length(map.domain_vars))) ⊃ X - - > ℂ$(superscriptnumber(length(map.funcs)))")
+    println(io, " action:")
+    if map.domain_vars == map.image_vars
+        for (i, var) in enumerate(map.domain_vars)
+            print(io, "  ", var, " ↦ ", map.funcs[i])
+            i < length(map.domain_vars) && print(io, "\n")
+        end
+    else
+        # TODO
+    end
+end
+
+Base.getindex(map::RationalMap, i::Int) = (map.image_vars[i], map.funcs[i])
+function Base.getindex(map::RationalMap, var::Variable)
+    id = findfirst(x->x==var, map.image_vars)
+    if isnothing(id)
+        error("The variable $(var) isn't present in the image variables")
+    end
+    return map.funcs[id]
+end
 
 struct MonomialVector
     mds::Vector{Multidegree}
@@ -14,27 +54,27 @@ end
 Base.length(mons::MonomialVector) = length(mons.mds)
 
 # TODO: think about other ways to represent samples
-# TODO: make pretty printing
 struct VarietySamples
     solutions::Array{CC, 3} # n_unknowns x n_sols x n_instances
     parameters::Array{CC, 2} # n_params x n_instances
 end
 
+# TODO
 function Base.show(io::IO, samples::VarietySamples)
     println(io, "VarietySamples")
     println(io, " solutions:")
     print(io, " parameters:")
 end
 
-# TODO: make pretty printing
 mutable struct SampledSystem
-    const system::System
+    system::System
     samples::VarietySamples
     monodromy_permutations::Vector{Vector{Int}}
     block_partitions::Vector{Vector{Vector{Int}}}
     deck_permutations::Vector{Vector{Int}}
 end
 
+# TODO: Do we need this constructor?
 SampledSystem() = SampledSystem(
     System([]),
     VarietySamples(Array{CC}(undef, 0, 0, 0), Array{CC}(undef, 0, 0)),
@@ -48,6 +88,7 @@ function SampledSystem(F::System, MR::MonodromyResult)
     solsM = VV2M(sols)
     solutions, parameters = reshape(solsM, size(solsM)..., 1), reshape(p₀, length(p₀), 1)
 
+    # TODO: throw warning?
     if length(sols) == 1
         return SampledSystem(F,
             VarietySamples(solutions, parameters),
@@ -59,7 +100,8 @@ function SampledSystem(F::System, MR::MonodromyResult)
     block_partitions = all_block_partitions(permutations_to_group(monodromy_permutations))
     deck_permutations = group_to_permutations(centralizer(monodromy_permutations))
 
-    return SampledSystem(F,
+    return SampledSystem(
+        F,
         VarietySamples(solutions, parameters),
         monodromy_permutations,
         block_partitions,
@@ -78,7 +120,7 @@ function Base.show(io::IO, F::SampledSystem)
     print(io, "\n\n")
     println(io, " number of solutions: $(size(sols, 2))")
     println(io, " number of instances: $(size(sols, 3))")
-    print(io, " number of symmetry permutations: $(length(F.deck_permutations))")
+    print(io, " number of deck permutations: $(length(F.deck_permutations))")
 end
 
 unknowns(F::SampledSystem) = F.system.variables
@@ -120,6 +162,11 @@ function run_monodromy(F::System, (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}}; o
         error("No additional solutions were found, no monodromy group available. Try running again...")
     end
     return SampledSystem(F, MR)
+end
+
+# TODO
+function run_monodromy(F::SampledSystem; options...)::SampledSystem
+
 end
 
 function extract_samples(data_points::Vector{Tuple{Result, Vector{CC}}}, F::SampledSystem)::Tuple{Array{CC, 3}, Array{CC, 2}}

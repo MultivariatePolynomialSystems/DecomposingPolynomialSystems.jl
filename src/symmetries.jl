@@ -1,19 +1,13 @@
 include("interpolation.jl")
 
 export DeckTransformationGroup, ScalingSymmetryGroup
+export show_map
 export scaling_symmetries, _verify_commutativity
 export symmetries_fixing_parameters_dense!, symmetries_fixing_parameters_graded!
 export symmetries_fixing_parameters!, symmetries_fixing_parameters
 
-NoExpression = Union{Nothing, Expression}
-
-struct RationalMap
-
-end
-
-# TODO: make pretty printing
 struct DeckTransformationGroup
-    action::Vector{Dict{Variable, NoExpression}}
+    maps::Vector{RationalMap}
     structure::String
     F::SampledSystem
 end
@@ -27,22 +21,24 @@ function DeckTransformationGroup(
     symmetries::Vector{Vector{NoExpression}},
     F::SampledSystem
 )
-    action = [Dict(zip(unknowns(F), symmetry)) for symmetry in symmetries]
+    action = [RationalMap(variables(F), vcat(symmetry, parameters(F))) for symmetry in symmetries]
     return DeckTransformationGroup(action, group_structure(F.deck_permutations), F)
 end
 
 function Base.show(io::IO, deck::DeckTransformationGroup)
-    println(io, "DeckTransformationGroup of order $(length(deck.action))")
+    println(io, "DeckTransformationGroup of order $(length(deck.maps))")
     println(io, " structure: ", deck.structure)
     print(io, " action:")
-    for i in eachindex(deck.action)
-        println(io, "\n  ", int2str(i), " map:")
-        for (j, (var, expr)) in enumerate(deck.action[i])
-            print(io, "   ", var, " ↦ ", expr)
-            j < length(deck.action[i]) && print(io, "\n")
+    for i in eachindex(deck.maps)
+        println(io, "\n  ", to_ordinal(i), " map:")
+        for (j, var) in enumerate(unknowns(deck.F))  # action on parameters is trivial, don't show it
+            print(io, "   ", var, " ↦ ", deck.maps[i][var])
+            j < length(unknowns(deck.F)) && print(io, "\n")
         end
     end
 end
+
+Base.getindex(deck::DeckTransformationGroup, i::Int) = deck.maps[i]
 
 # TODO: make pretty printing
 struct ScalingSymmetryGroup
@@ -133,19 +129,12 @@ end
     scaling_symmetries(F::System; in_hnf::Bool=true)
 
 Given a polynomial system `F` returns the group of scaling symmetries 
-of the polynomial system `F` that fix the parameters.
+of the polynomial system `F`.
 
 ```julia-repl
-julia> @var x[1:2] p[1:2]
-(Variable[x₁, x₂], Variable[p₁, p₂])
+julia> @var x[1:2] p[1:2];
 
-julia> F = System([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; variables=x, parameters=p)
-System of length 2
- 2 variables: x₁, x₂
- 2 parameters: p₁, p₂
-
- -p₁ + x₁^2 - x₂^2
- -p₂ + 2*x₂*x₁
+julia> F = System([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; variables=x, parameters=p);
 
 julia> scalings = scaling_symmetries(F)
 ScalingSymmetryGroup with 2 scalings
@@ -330,6 +319,10 @@ function _interpolate_symmetry_function(
     coeffs = Matrix{CC}(transpose(nullspace(A)))
     logging && println("Size of the transposed nullspace: ", size(coeffs))
 
+    if size(coeffs, 1) == 0
+        return nothing
+    end
+
     logging && println("Computing the reduced row echelon form of the transposed nullspace...\n")
     coeffs = sparsify(rref(coeffs, tol), tol, digits=1)
     coeffs = _remove_zero_nums_and_denoms(coeffs, num_mons, denom_mons)
@@ -409,7 +402,7 @@ function symmetries_fixing_parameters_graded!(
                             if !isnothing(symmetry[i])
                                 logging && printstyled(
                                     "Good representative for the ",
-                                    int2str(j),
+                                    to_ordinal(j),
                                     " symmetry, variable ",
                                     unknowns(F)[i],
                                     ":\n",
@@ -525,12 +518,15 @@ function _all_deck_commute(F::SampledSystem, scaling::Tuple{Int, Vector{Int}}; t
     sols1 = F.samples.solutions[:, :, instance_id]
     params1 = F.samples.parameters[:, instance_id]
     params2 = to_CC(scaling)[end-n_parameters(F)+1:end].*params1
-    sample_system!(F, params2)
+    println("Starting sampling...")
+    sample_system!(F, params2)  # TODO: what if n_sols is huge?
+    println("Finished sampling...")
     sols2 = F.samples.solutions[:, :, end]
     for perm in F.deck_permutations
         for i in axes(sols1, 2)
             Φ_sol = to_CC(scaling)[1:n_unknowns(F)].*sols1[:, i]
             id = find_solution_id(Φ_sol, sols2, tol)
+            if isnothing(id) return false end
             ΨΦ_sol = sols2[:, perm[id]]
             Ψ_sol = sols1[:, perm[i]]
             ΦΨ_sol = to_CC(scaling)[1:n_unknowns(F)].*Ψ_sol
@@ -540,6 +536,7 @@ function _all_deck_commute(F::SampledSystem, scaling::Tuple{Int, Vector{Int}}; t
     return true
 end
 
+# TODO: consider every element from finite components => take every linear combination with coeffs from Z_si
 function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingSymmetryGroup)
     final_grading = Grading([])
     for (sᵢ, Uᵢ) in scalings.grading
@@ -572,6 +569,7 @@ function symmetries_fixing_parameters!(
         return DeckTransformationGroup(F) # return the identity group
     end
 
+    # scalings = scaling_symmetries(F)
     scalings = _scalings_commuting_with_deck(F, scaling_symmetries(F))
     scalings = param_dep ? scalings : _restrict_scalings(scalings, unknowns(F))
     if length(scalings.grading) == 0
@@ -624,16 +622,9 @@ degrees of numerator and denominator polynomials in expressions
 for the symmetries.
 
 ```julia-repl
-julia> @var x[1:2] p[1:2]
-(Variable[x₁, x₂], Variable[p₁, p₂])
+julia> @var x[1:2] p[1:2];
 
-julia> F = System([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; variables=x, parameters=p)
-System of length 2
- 2 variables: x₁, x₂
- 2 parameters: p₁, p₂
-
- -p₁ + x₁^2 - x₂^2
- -p₂ + 2*x₂*x₁
+julia> F = System([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; variables=x, parameters=p);
 
 julia> symmetries_fixing_parameters(F; degree_bound=1, param_dep=false)
 DeckTransformationGroup of order 4

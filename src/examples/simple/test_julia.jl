@@ -71,3 +71,18 @@ function print_vars(G::AlgebraicGroup)
 end
 
 print_vars(DTG)
+
+struct Polar{T<:Real} <: Number
+    r::T
+    Θ::T
+end
+Polar(r::Real,Θ::Real) = Polar(promote(r,Θ)...)
+Base.show(io::IO, z::Polar) = print(io, z.r, " * exp(", z.Θ, "im)")
+Base.show(io::IO, ::MIME"text/plain", z::Polar{T}) where{T} = print(io, "Polar{$T} complex number:\n   ", z)
+
+Polar(3, 4.0)
+[Polar(3, 4.0), Polar(4.0,5.3)]
+
+Base.show(io::IO, ::MIME"text/html", z::Polar{T}) where {T} = println(io, "<code>Polar{$T}</code> complex number: ", z.r, " <i>e</i><sup>", z.Θ, " <i>i</i></sup>")
+
+show(stdout, "text/html", Polar(3.0,4.0))
