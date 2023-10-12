@@ -18,7 +18,7 @@ struct RationalMap
     end
 end
 
-# TODO: what if vars not in funcs? What if funcs has vars not in vars?
+# TODO: what if vars not in funcs? What if funcs has variables not present in vars?
 function RationalMap(vars::Vector{Variable}, funcs::Vector{NoExpression})
     @assert length(vars) == length(funcs) "#vars ≂̸ #funcs, specify image variables"
     return RationalMap(vars, vars, funcs)
@@ -88,7 +88,7 @@ function SampledSystem(F::System, MR::MonodromyResult)
     solsM = VV2M(sols)
     solutions, parameters = reshape(solsM, size(solsM)..., 1), reshape(p₀, length(p₀), 1)
 
-    # TODO: throw warning?
+    # TODO: throw warning? Error?
     if length(sols) == 1
         return SampledSystem(F,
             VarietySamples(solutions, parameters),
@@ -127,6 +127,7 @@ unknowns(F::SampledSystem) = F.system.variables
 parameters(F::SampledSystem) = F.system.parameters
 variables(F::SampledSystem) = vcat(unknowns(F), parameters(F))
 
+# TODO: remove underscore?
 n_unknowns(F::SampledSystem) = length(unknowns(F))
 n_parameters(F::SampledSystem) = length(parameters(F))
 n_variables(F::SampledSystem) = length(variables(F))

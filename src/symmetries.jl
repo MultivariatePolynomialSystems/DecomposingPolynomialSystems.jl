@@ -381,8 +381,8 @@ function symmetries_fixing_parameters_graded!(
             denom_ids = get(classes, denom_deg, nothing)
             if !isnothing(denom_ids)
                 denom_mons = MonomialVector(mds[denom_ids], scalings.vars)
-                g = gcd_mds([gcd_mons(num_mons), gcd_mons(denom_mons)])  # TODO: improve
-                if iszero(g) && (!only_param_dep(num_mons, n_unknowns) || !only_param_dep(denom_mons, n_unknowns))  # TODO: improve
+                g = gcd_mds([gcd_mons(num_mons), gcd_mons(denom_mons)])  # TODO: rewrite
+                if iszero(g) && (!only_param_dep(num_mons, n_unknowns) || !only_param_dep(denom_mons, n_unknowns))  # TODO: rewrite
                     if isnothing(eval_num_mons)
                         eval_num_mons = evaluate_monomials_at_samples_(num_mons, F.samples)
                     end
@@ -508,9 +508,7 @@ function to_CC(scaling::Tuple{Int, Vector{Int}})::Vector{CC}
     return [exp(2*pi*im*k/scaling[1]) for k in scaling[2]]
 end
 
-function find_solution_id(sol::Vector{CC}, sols::Matrix{CC}, tol::Float64)
-    return findfirst(x->norm(x-sol)<tol, M2VV(sols))
-end
+Base.findfirst(sol::Vector{CC}, sols::Matrix{CC}; tol::Float64=1e-5) = findfirst(x->norm(x-sol)<tol, M2VV(sols))
 
 # verify for all of the solutions in 1 instance
 function _all_deck_commute(F::SampledSystem, scaling::Tuple{Int, Vector{Int}}; tol::Float64=1e-5)::Bool
@@ -525,7 +523,7 @@ function _all_deck_commute(F::SampledSystem, scaling::Tuple{Int, Vector{Int}}; t
     for perm in F.deck_permutations
         for i in axes(sols1, 2)
             Φ_sol = to_CC(scaling)[1:n_unknowns(F)].*sols1[:, i]
-            id = find_solution_id(Φ_sol, sols2, tol)
+            id = findfirst(Φ_sol, sols2, tol)
             if isnothing(id) return false end
             ΨΦ_sol = sols2[:, perm[id]]
             Ψ_sol = sols1[:, perm[i]]

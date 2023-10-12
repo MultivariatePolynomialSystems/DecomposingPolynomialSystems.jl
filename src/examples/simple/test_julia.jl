@@ -86,3 +86,5 @@ Polar(3, 4.0)
 Base.show(io::IO, ::MIME"text/html", z::Polar{T}) where {T} = println(io, "<code>Polar{$T}</code> complex number: ", z.r, " <i>e</i><sup>", z.Θ, " <i>i</i></sup>")
 
 show(stdout, "text/html", Polar(3.0,4.0))
+
+findfirst(sol::Vector{CC}, sols::Matrix{CC}, tol::Float64) = findfirst(x->norm(x-sol)<tol, M2VV(sols))
