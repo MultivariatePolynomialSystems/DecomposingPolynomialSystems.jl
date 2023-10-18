@@ -1,68 +1,4 @@
-export ExpressionMap,
-    SampledSystem,
-    FactorizingMap,
-    run_monodromy,
-    sample_system!,
-    evaluate_monomials_at_samples,
-    evaluate_monomials_at_samples_,
-    unknowns,
-    parameters,
-    variables,
-    n_unknowns,
-    n_parameters,
-    n_variables
-
-Multidegree = Vector{Int8} # TODO: is it OK to suppose degrees are < 2^7 = 128?
-Grading = Vector{Tuple{Int, Matrix{Int}}}
-MiExpression = Union{Missing, Expression}
-
-struct ExpressionMap
-    domain_vars::Vector{Variable}
-    image_vars::Vector{Variable}
-    exprs::Vector{MiExpression}
-
-    function ExpressionMap(domain_vars, image_vars, funcs)
-        # TODO: exclude empty vectors, repetitions in vars
-        return new(domain_vars, image_vars, funcs)
-    end
-end
-
-# TODO: what if vars not in funcs? What if funcs has variables not present in vars?
-function ExpressionMap(vars::Vector{Variable}, exprs::Vector{MiExpression})
-    @assert length(vars) == length(exprs) "#vars ≂̸ #exprs, specify image variables"
-    return ExpressionMap(vars, vars, exprs)
-end
-
-Base.getindex(f::ExpressionMap, i::Int) = (f.image_vars[i], f.exprs[i])
-function Base.getindex(f::ExpressionMap, var::Variable)
-    id = findfirst(x->x==var, f.image_vars)
-    if isnothing(id)
-        error("The variable $(var) isn't present in the image variables")
-    end
-    return f.exprs[id]
-end
-
-function (f::ExpressionMap)(x)
-
-end
-
-# TODO
-function Base.:(∘)(f::ExpressionMap, g::ExpressionMap)
-
-end
-
-function Base.show(io::IO, map::ExpressionMap)
-    println(io, "ExpressionMap: ℂ$(superscriptnumber(length(map.domain_vars))) ⊃ X - - > ℂ$(superscriptnumber(length(map.exprs)))")
-    println(io, " action:")
-    if map.domain_vars == map.image_vars
-        for (i, var) in enumerate(map.domain_vars)
-            print(io, "  ", var, " ↦ ", map.exprs[i])
-            i < length(map.domain_vars) && print(io, "\n")
-        end
-    else
-        # TODO
-    end
-end
+export SampledSystem
 
 # TODO: think about other ways to represent samples
 struct VarietySamples
@@ -136,29 +72,12 @@ end
 
 unknowns(F::SampledSystem) = F.system.variables
 parameters(F::SampledSystem) = F.system.parameters
-variables(F::SampledSystem) = vcat(unknowns(F), parameters(F))
+HomotopyContinuation.variables(F::SampledSystem) = vcat(unknowns(F), parameters(F))
 
 # TODO: remove underscore?
 n_unknowns(F::SampledSystem) = length(unknowns(F))
 n_parameters(F::SampledSystem) = length(parameters(F))
 n_variables(F::SampledSystem) = length(variables(F))
-
-
-mutable struct FactorizingMap
-    map::Vector{Expression}
-    domain::Ref{SampledSystem}
-    image::Ref{SampledSystem}
-    monodromy_group::GapObj
-    # deck_transformations::Vector{Vector{Expression}}
-end
-
-function FactorizingMap(map::Vector{Expression})
-    return FactorizingMap(map,
-        Ref{SampledSystem}(),
-        Ref{SampledSystem}(),
-        GAP.evalstr( "Group(())" )
-    )
-end
 
 function run_monodromy(F::System; options...)::SampledSystem
     MR = monodromy_solve(F; permutations=true, options...)
@@ -255,116 +174,4 @@ function sample_system!(F::SampledSystem, n_instances::Int)
     end
 
     return Vector((n_computed_instances+1):n_instances)  # TODO: remove return?
-end
-
-function multiplication_matrix(F::SampledSystem, f::Expression, B::Vector{Expression}, instance_id::Int)
-    sols = F.samples.solutions[:, :, instance_id]
-    n_sols = size(sols, 2)
-    vars = variables(F.system)
-    A = zeros(CC, n_sols, n_sols)
-    for i in 1:n_sols
-        A[:, i] = express_in_basis(F, f*B[i], B, instance_id=instance_id)
-    end
-    return sparsify(A, 1e-5)
-end
-
-function multiplication_matrix(F::SampledSystem, f::Expression, B::Vector{Expression}; degree::Int)::Matrix{Union{Nothing, Expression}}
-    n_sols = size(F.samples.solutions, 2)
-    M = Matrix{Union{Nothing, Expression}}(hcat([[nothing for i in 1:n_sols] for j in 1:n_sols]...))
-    for i in 1:n_sols
-        M[:, i] = express_in_basis(F, f*B[i], B, degree)
-    end
-    return M
-end
-
-function monomial_basis(F::SampledSystem)::Vector{Expression}
-    n_sols = size(F.samples.solutions, 2)
-    sols = F.samples.solutions[:,:,1]  # solutions for the 1st instance
-    unknowns = variables(F.system)
-    A = zeros(CC, n_sols, n_sols)
-    n_indep = 1
-    indep_mons = Vector{Expression}([])
-
-    for i in 0:n_sols-1
-        mons = get_monomials_fixed_degree(unknowns, i)
-        for j in eachindex(mons)
-            A[:, n_indep] = [subs(mons[j], unknowns=>sols[:,k]) for k in 1:n_sols]
-            if rank(A, atol=1e-8) == n_indep
-                push!(indep_mons, mons[j])
-                n_indep += 1
-                if n_indep > n_sols
-                    return indep_mons
-                end
-            end
-        end
-    end
-    @warn "Returned monomials don't form a basis!"
-    return indep_mons
-end
-
-function eval_at_sols(F::SampledSystem, G::Vector{Expression})::Matrix{CC}
-    sols = F.samples.solutions[:, :, 1]
-    params = F.samples.parameters[:, 1]
-    n_sols = size(sols, 2)
-    n_elems = length(G)
-    vars = vcat(variables(F.system), parameters(F.system))
-    A = zeros(CC, n_sols, n_elems)
-    for i in 1:n_sols
-        A[i, :] = subs(G, vars => vcat(sols[:,i], params))
-    end
-    return A
-end
-
-function is_basis(F::SampledSystem, B::Vector{Expression})::Bool
-    sols = F.samples.solutions[:, :, 1]
-    n_sols = size(sols, 2)
-    if length(B) < n_sols || length(B) > n_sols
-        return false
-    end
-    A = eval_at_sols(F, B)
-    N = nullspace(A)
-    println("dim null = ", size(N, 2))
-    return size(N, 2) == 0
-end
-
-function are_LI(F::SampledSystem, G::Vector{Expression})::Bool
-    A = eval_at_sols(F, G)
-    N = nullspace(A)
-    println("dim null = ", size(N, 2))
-    return size(N, 2) == 0
-end
-
-function express_in_basis(F::SampledSystem, f::Expression, B::Vector{Expression}; instance_id::Int)::Vector{CC}
-    sols = F.samples.solutions[:, :, instance_id]
-    params = F.samples.parameters[:, instance_id]
-    n_sols = size(sols, 2)
-    vars = vcat(variables(F.system), parameters(F.system))
-    A = zeros(CC, n_sols, n_sols+1)
-    for i in 1:n_sols
-        A[i, 1:n_sols] = subs(B, vars => vcat(sols[:, i], params))
-        A[i, n_sols+1] = -subs(f, vars => vcat(sols[:, i], params))
-    end
-    c = nullspace(A)
-    @assert size(c, 2) == 1
-    @assert abs(c[n_sols+1, 1]) > 1e-10
-    return sparsify(vec(p2a(c)), 1e-5)
-end
-
-function express_in_basis(F::SampledSystem, f::Expression, B::Vector{Expression}, degree::Int)::Vector{Union{Nothing,Expression}}
-    _, n_sols, n_instances = size(F.samples.solutions)
-    evals = zeros(CC, n_sols, n_instances)
-    for i in 1:n_instances
-        evals[:, i] = express_in_basis(F, f, B; instance_id=i)
-    end
-
-    params = parameters(F.system)
-    mons = get_monomials(params, degree)
-    println("n_mons = ", length(mons))
-    evaluated_mons = evaluate_monomials_at_samples(mons, F.samples.parameters, params)
-
-    coeffs = Vector{Union{Nothing, Expression}}([nothing for i in 1:n_sols])
-    for i in 1:n_sols
-        coeffs[i] = interpolate_dense(view(evals, i, :), mons, evaluated_mons, func_type="rational", tol=1e-5)
-    end
-    return coeffs
 end

@@ -28,12 +28,51 @@ xp0 = fabricateSample()
 F = run_monodromy(F, xp0)
 sample_system!(F, 10)
 
-d = Int8(3)
-n_variables(F)
-MDs = multidegrees_affine(n_variables(F), d)
+function evaluate1(mons::MonomialVector, samples::VarietySamples)
+    solutions = samples.solutions
+    parameters = samples.parameters
 
-evaluate_monomials_at_samples(MDs, F.samples) # < 2 sec
-@btime evaluate_monomials_at_samples(MDs, F.samples);
+    n_unknowns, n_sols, n_instances = size(solutions)
+    mds = mons.mds
+    n_mds = length(mds)
+
+    evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
+    for i in 1:n_instances
+        params = parameters[:, i]
+        params_eval = [prod(params.^md[n_unknowns+1:end]) for md in mds]
+        sols = solutions[:, :, i]
+        for j in 1:n_mds
+            evaluated_mons[j, :, i] = vec(prod(sols.^mds[j][1:n_unknowns], dims=1)).*params_eval[j]
+        end
+    end
+    return evaluated_mons
+end
+
+function evaluate2(mons::MonomialVector, samples::VarietySamples)
+    solutions = samples.solutions
+    parameters = samples.parameters
+
+    n_unknowns, n_sols, n_instances = size(solutions)
+    mds = mons.mds
+    n_mds = length(mds)
+
+    evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
+    for i in 1:n_instances
+        params = view(parameters, :, i)
+        params_eval = [prod(params.^md[n_unknowns+1:end]) for md in mds]
+        sols = view(solutions, :, :, i)
+        for j in 1:n_mds
+            evaluated_mons[j, :, i] = vec(prod(sols.^mds[j][1:n_unknowns], dims=1)).*params_eval[j]
+        end
+    end
+    return evaluated_mons
+end
+
+d = Int8(3)
+mons = monomials(variables(F), d)
+
+evaluate(mons, F.samples)
+@btime evaluate(mons, F.samples);
 
 evaluate_monomials_at_samples_(MDs, F.samples)
 @btime evaluate_monomials_at_samples_(MDs, F.samples);

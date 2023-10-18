@@ -2,27 +2,31 @@ export Monomial,
     MonomialVector,
     monomials
 
+Grading = Vector{Tuple{Int, Matrix{Int}}}
+
 # TODO: remove?
 # TODO: extend Number or nothing at all?
 struct Monomial{T<:Integer} <: Number
     md::Vector{T}
     vars::Vector{Variable}
 
-    function Monomial{T}(md::Vector{T}, vars::Vector{Variable}) where {T<:Integer}
+    function Monomial{T}(md, vars) where {T<:Integer}
         # TODO: check if lengths are equal, if mds contains numbers >= 0
         return new(md, vars)
     end
 end
 
-struct MonomialVector{T<:Integer} <: AbstractVector{Monomial}
+mutable struct MonomialVector{T<:Integer} # <: AbstractVector{Monomial}
     mds::Vector{Vector{T}}
     vars::Vector{Variable}
 
-    function MonomialVector{T}(mds::Vector{Vector{T}}, vars::Vector{Variable}) where {T<:Integer}
+    function MonomialVector{T}(mds, vars) where {T<:Integer}
         # TODO: check if lengths are equal, if mds contains numbers >= 0
         return new(mds, vars)
     end
 end
+
+MonomialVector(mds::Vector{Vector{T}}, vars::Vector{Variable}) where {T<:Integer} = MonomialVector{T}(mds, vars)
 
 Base.length(mons::MonomialVector) = length(mons.mds)
 Base.getindex(mons::MonomialVector, i::Integer) = Monomial(mons.mds[i], mons.vars)
@@ -30,12 +34,12 @@ Base.getindex(mons::MonomialVector, inds...) = MonomialVector(getindex(mons.mds,
 
 # TODO
 function Base.show(io::IO, mons::MonomialVector)
-    println(io, "MonomialVector")
+    print(io, "MonomialVector of length $(length(mons.mds))")
 end
 
 function multidegrees_homogeneous(md::Vector{T}, n::Integer, d::T) where {T<:Integer}
     n == 1 && return [vcat(md, d)]
-    return vcat([multidegrees_homogeneous(vcat(md, convert(T, i)), n-1, d-i) for i in 0:d]...)
+    return vcat([multidegrees_homogeneous(vcat(md, convert(T, i)), n-1, d-i) for i::T in 0:d]...)
 end
 
 function multidegrees_homogeneous(n::Integer, d::T) where {T<:Integer}
@@ -43,10 +47,10 @@ function multidegrees_homogeneous(n::Integer, d::T) where {T<:Integer}
 end
 
 function multidegrees_affine(n::Integer, d::T) where {T<:Integer}
-    return vcat([multidegrees_homogeneous(n, convert(T, i)) for i in 0:d]...)
+    return vcat([multidegrees_homogeneous(n, i) for i::T in 0:d]...)
 end
 
-function monomials(vars::Vector{Variable}, d::Integer; homogeneous::Bool=false)
+function HomotopyContinuation.monomials(vars::Vector{Variable}, d::Integer; homogeneous::Bool=false)
     homogeneous && return MonomialVector(multidegrees_homogeneous(length(vars), d), vars)
     return MonomialVector(multidegrees_affine(length(vars), d), vars)
 end

@@ -8,6 +8,8 @@ export DeckTransformationGroup,
     symmetries_fixing_parameters!,
     symmetries_fixing_parameters
 
+MiExpression = Union{Missing, Expression}
+
 struct DeckTransformationGroup
     maps::Vector{ExpressionMap}
     structure::String
