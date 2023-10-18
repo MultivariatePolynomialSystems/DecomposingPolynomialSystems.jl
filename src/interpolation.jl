@@ -1,88 +1,10 @@
+include("monomials.jl")
+
 import HomotopyContinuation: Expression
-import DecomposingPolynomialSystems: M2V, V2M, VV2M, p2a, eye
 
 export gcd_mds, mds2mons, only_param_dep
-export multidegrees_up_to_total_degree, partition_multidegrees
+export partition_multidegrees
 export interpolate_vanishing_polynomials
-
-# TODO: Number => Int ?
-function modV(v::Vector{<:Number}, n::Number)::Vector{<:Number}
-    if iszero(n)
-        return v
-    end
-    return [mod(vᵢ, n) for vᵢ in v]
-end
-
-function multidegrees_from_total_degree(md::Multidegree, n::Int, d::Int)::Vector{Multidegree}
-    if n == 1
-        return [vcat(md, d)]
-    end
-    mds = Vector{Multidegree}([])
-    for i in 0:d
-        append!(mds, multidegrees_from_total_degree(vcat(md, Int8(i)), n-1, d-i))
-    end
-    return mds
-end
-
-function multidegrees_from_total_degree(n::Int, d::Int)::Vector{Multidegree}
-    return multidegrees_from_total_degree(Multidegree([]), n, d)
-end
-
-function multidegrees_up_to_total_degree(n::Int, d::Int)::Vector{Multidegree}
-    mds = Vector{Multidegree}([])
-    for i in 0:d
-        append!(mds, multidegrees_from_total_degree(n, i))
-    end
-    return mds
-end
-
-function monomials(vars::Vector{Variable}, d::Int; homogeneous::Bool=false)::MonomialVector
-    homogeneous && return MonomialVector(multidegrees_from_total_degree(length(vars), d), vars)
-    return MonomialVector(multidegrees_up_to_total_degree(length(vars), d), vars)
-end
-
-function degree_wrt_grading(md::Multidegree, grading::Grading)::Vector{Int}
-    return vcat([modV(Uᵢ*md, sᵢ) for (sᵢ, Uᵢ) in grading]...)
-end
-
-# TODO: Can we save multidegrees immediately?
-function partition_multidegrees(mds::Vector{Multidegree}, grading::Grading)::Dict{Vector{Int}, Vector{Int}}
-    classes = Dict{Vector{Int}, Vector{Int}}()
-    for (i, md) in enumerate(mds)
-        deg = degree_wrt_grading(md, grading)
-        if isnothing(get(classes, deg, nothing)) # the key doesn't exist
-            classes[deg] = [i]
-        else
-            push!(classes[deg], i)
-        end
-    end
-    return classes
-end
-
-function gcd_mds(mds::Vector{Multidegree})::Multidegree
-    return M2V(minimum(VV2M(mds), dims=2))
-end
-
-function gcd_mons(mons::MonomialVector)::Multidegree
-    return gcd_mds(mons.mds)
-end
-
-function mds2mons(mds::Vector{Multidegree}, vars::Vector{Variable})::Vector{Expression}
-    nonzero_ids = [findall(!iszero, md) for md in mds]
-    return [prod(vars[ids].^md[ids]) for (md, ids) in zip(mds, nonzero_ids)]
-end
-
-function only_param_dep(md::Multidegree, n_unknowns::Int)::Bool
-    return iszero(md[1:n_unknowns])
-end
-
-function only_param_dep(mds::Vector{Multidegree}, n_unknowns::Int)::Bool
-    return all([only_param_dep(md, n_unknowns) for md in mds])
-end
-
-function only_param_dep(mons::MonomialVector, n_unknowns::Int)::Bool
-    return only_param_dep(mons.mds, n_unknowns)
-end
 
 function ArrayOrSubArray(dim::Int)
     return Union{Array{CC, dim}, SubArray{CC, dim}}
@@ -146,7 +68,7 @@ function reconstruct_functions(coeffs::Matrix{CC}, mons::Vector{Expression}; fun
 end
 
 function good_representative(coeffs::Matrix{CC})::Vector{CC}
-    return coeffs[findmin(M2V(sum(coeffs .!= 0, dims=2)))[2], :]
+    return coeffs[findmin(vec(sum(coeffs .!= 0, dims=2)))[2], :]
 end
 
 # NOT READY YET...

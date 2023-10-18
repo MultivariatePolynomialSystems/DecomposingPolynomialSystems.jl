@@ -1,57 +1,68 @@
-export RationalMap, SampledSystem, FactorizingMap
-export run_monodromy, sample_system!
-export evaluate_monomials_at_samples, evaluate_monomials_at_samples_
-export unknowns, parameters, variables, n_unknowns, n_parameters, n_variables
+export ExpressionMap,
+    SampledSystem,
+    FactorizingMap,
+    run_monodromy,
+    sample_system!,
+    evaluate_monomials_at_samples,
+    evaluate_monomials_at_samples_,
+    unknowns,
+    parameters,
+    variables,
+    n_unknowns,
+    n_parameters,
+    n_variables
 
 Multidegree = Vector{Int8} # TODO: is it OK to suppose degrees are < 2^7 = 128?
 Grading = Vector{Tuple{Int, Matrix{Int}}}
-NoExpression = Union{Nothing, Expression}
+MiExpression = Union{Missing, Expression}
 
-struct RationalMap
+struct ExpressionMap
     domain_vars::Vector{Variable}
     image_vars::Vector{Variable}
-    funcs::Vector{NoExpression}
+    exprs::Vector{MiExpression}
 
-    function RationalMap(domain_vars, image_vars, funcs)
+    function ExpressionMap(domain_vars, image_vars, funcs)
         # TODO: exclude empty vectors, repetitions in vars
         return new(domain_vars, image_vars, funcs)
     end
 end
 
 # TODO: what if vars not in funcs? What if funcs has variables not present in vars?
-function RationalMap(vars::Vector{Variable}, funcs::Vector{NoExpression})
-    @assert length(vars) == length(funcs) "#vars ≂̸ #funcs, specify image variables"
-    return RationalMap(vars, vars, funcs)
+function ExpressionMap(vars::Vector{Variable}, exprs::Vector{MiExpression})
+    @assert length(vars) == length(exprs) "#vars ≂̸ #exprs, specify image variables"
+    return ExpressionMap(vars, vars, exprs)
 end
 
-function Base.show(io::IO, map::RationalMap)
-    println(io, "RationalMap: ℂ$(superscriptnumber(length(map.domain_vars))) ⊃ X - - > ℂ$(superscriptnumber(length(map.funcs)))")
+Base.getindex(f::ExpressionMap, i::Int) = (f.image_vars[i], f.exprs[i])
+function Base.getindex(f::ExpressionMap, var::Variable)
+    id = findfirst(x->x==var, f.image_vars)
+    if isnothing(id)
+        error("The variable $(var) isn't present in the image variables")
+    end
+    return f.exprs[id]
+end
+
+function (f::ExpressionMap)(x)
+
+end
+
+# TODO
+function Base.:(∘)(f::ExpressionMap, g::ExpressionMap)
+
+end
+
+function Base.show(io::IO, map::ExpressionMap)
+    println(io, "ExpressionMap: ℂ$(superscriptnumber(length(map.domain_vars))) ⊃ X - - > ℂ$(superscriptnumber(length(map.exprs)))")
     println(io, " action:")
     if map.domain_vars == map.image_vars
         for (i, var) in enumerate(map.domain_vars)
-            print(io, "  ", var, " ↦ ", map.funcs[i])
+            print(io, "  ", var, " ↦ ", map.exprs[i])
             i < length(map.domain_vars) && print(io, "\n")
         end
     else
         # TODO
     end
 end
-
-Base.getindex(map::RationalMap, i::Int) = (map.image_vars[i], map.funcs[i])
-function Base.getindex(map::RationalMap, var::Variable)
-    id = findfirst(x->x==var, map.image_vars)
-    if isnothing(id)
-        error("The variable $(var) isn't present in the image variables")
-    end
-    return map.funcs[id]
-end
-
-struct MonomialVector
-    mds::Vector{Multidegree}
-    vars::Vector{Variable}
-end
-
-Base.length(mons::MonomialVector) = length(mons.mds)
 
 # TODO: think about other ways to represent samples
 struct VarietySamples
@@ -85,7 +96,7 @@ SampledSystem() = SampledSystem(
 function SampledSystem(F::System, MR::MonodromyResult)
     sols, p₀ = HomotopyContinuation.solutions(MR), MR.parameters
     
-    solsM = VV2M(sols)
+    solsM = hcat(sols...)
     solutions, parameters = reshape(solsM, size(solsM)..., 1), reshape(p₀, length(p₀), 1)
 
     # TODO: throw warning? Error?
@@ -191,7 +202,7 @@ function extract_samples(data_points::Vector{Tuple{Result, Vector{CC}}}, F::Samp
             sols = HomotopyContinuation.solutions(res[1][1])
             params = res[1][2]
         end
-        all_sols[:, :, i] = VV2M(sols)
+        all_sols[:, :, i] = hcat(sols...)
         all_params[:, i] = params
     end
     return (all_sols, all_params)
@@ -210,7 +221,7 @@ function sample_system!(F::SampledSystem, target_params::Vector{CC})
     
     n_unknowns, n_sols, _ = size(F.samples.solutions)
     solutions = zeros(CC, n_unknowns, n_sols, 1)
-    solutions[:, :, 1] = VV2M(HomotopyContinuation.solutions(data_points[1][1])) # TODO: what if n_sols is different?
+    solutions[:, :, 1] = hcat(HomotopyContinuation.solutions(data_points[1][1])...) # TODO: what if n_sols is different?
     n_params = size(F.samples.parameters, 1)
     parameters = zeros(CC, n_params, 1)
     parameters[:, 1] = data_points[1][2]
@@ -243,58 +254,7 @@ function sample_system!(F::SampledSystem, n_instances::Int)
         F.samples = VarietySamples(all_sols, all_params)
     end
 
-    return Vector((n_computed_instances+1):n_instances)
-end
-
-# supposes each md in mds is a multidegree in both unknowns and parameters
-# TODO: The implementation below (with _) is more efficient (approx 2x),
-# TODO: since it exploits the sparsity of multidegrees. REMOVE THIS METHOD?
-function evaluate_monomials_at_samples(mons::MonomialVector, samples::VarietySamples)::Array{CC, 3}
-    solutions = samples.solutions
-    parameters = samples.parameters
-
-    n_unknowns, n_sols, n_instances = size(solutions)
-    mds = mons.mds
-    n_mds = length(mds)
-
-    evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
-    for i in 1:n_instances
-        params = parameters[:, i]
-        params_eval = [prod(params.^md[n_unknowns+1:end]) for md in mds]
-        sols = solutions[:, :, i]
-        for j in 1:n_mds
-            evaluated_mons[j, :, i] = M2V(prod(sols.^mds[j][1:n_unknowns], dims=1)).*params_eval[j]
-        end
-    end
-    return evaluated_mons
-end
-
-# TODO: consider view for slices
-function evaluate_monomials_at_samples_(mons::MonomialVector, samples::VarietySamples)::Array{CC, 3}
-    solutions = samples.solutions
-    parameters = samples.parameters
-
-    n_unknowns, n_sols, n_instances = size(solutions)
-    mds = mons.mds
-    n_mds = length(mds)
-
-    nonzero_ids_unknowns = [findall(!iszero, md[1:n_unknowns]) for md in mds]
-    nonzero_ids_params = [findall(!iszero, md[n_unknowns+1:end]) for md in mds]
-
-    evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
-    for i in 1:n_instances
-        params = parameters[:, i]
-        sols = solutions[:, :, i]
-        for (j, md) in enumerate(mds)
-            params_part = params[nonzero_ids_params[j]]
-            md_params_part = md[n_unknowns+1:end][nonzero_ids_params[j]]
-            params_eval = prod(params_part.^md_params_part)
-            sols_part = sols[nonzero_ids_unknowns[j],:]
-            md_sols_part = md[1:n_unknowns][nonzero_ids_unknowns[j]]
-            evaluated_mons[j, :, i] = M2V(prod(sols_part.^md_sols_part, dims=1)).*params_eval
-        end
-    end
-    return evaluated_mons
+    return Vector((n_computed_instances+1):n_instances)  # TODO: remove return?
 end
 
 function multiplication_matrix(F::SampledSystem, f::Expression, B::Vector{Expression}, instance_id::Int)
@@ -310,7 +270,7 @@ end
 
 function multiplication_matrix(F::SampledSystem, f::Expression, B::Vector{Expression}; degree::Int)::Matrix{Union{Nothing, Expression}}
     n_sols = size(F.samples.solutions, 2)
-    M = Matrix{Union{Nothing, Expression}}(VV2M([[nothing for i in 1:n_sols] for j in 1:n_sols]))
+    M = Matrix{Union{Nothing, Expression}}(hcat([[nothing for i in 1:n_sols] for j in 1:n_sols]...))
     for i in 1:n_sols
         M[:, i] = express_in_basis(F, f*B[i], B, degree)
     end
@@ -387,7 +347,7 @@ function express_in_basis(F::SampledSystem, f::Expression, B::Vector{Expression}
     c = nullspace(A)
     @assert size(c, 2) == 1
     @assert abs(c[n_sols+1, 1]) > 1e-10
-    return sparsify(M2V(p2a(c)), 1e-5)
+    return sparsify(vec(p2a(c)), 1e-5)
 end
 
 function express_in_basis(F::SampledSystem, f::Expression, B::Vector{Expression}, degree::Int)::Vector{Union{Nothing,Expression}}

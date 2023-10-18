@@ -38,3 +38,5 @@ DeckTransformationGroup of order 4
    x₁ ↦ (-1.0 + 0.0*im)*x₁
    x₂ ↦ (-1.0 + 0.0*im)*x₂
 ```
+### Computing invariants
+TBA...

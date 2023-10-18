@@ -1,19 +1,24 @@
-export a2p, p2a, M2V, M2VV, M2VM, V2M, V2Mt, VV2M, VM2M, VM2V, xx, xx2v, eye
+export a2p, p2a, M2VV, M2VM, xx, xx2v, eye
 export num_mons, num_mons_upto
-export sparsify, to_ordinal, subscriptnumber, superscriptnumber
+export sparsify!, to_ordinal, subscriptnumber, superscriptnumber
 
 a2p(M::AbstractMatrix{<:Number}) = [M; ones(eltype(M), 1, size(M, 2))]
 p2a(M::AbstractMatrix{<:Number}) = (M./M[end:end,:])[1:end-1,:]
 
-M2V(M::AbstractMatrix) = M[:]
 M2VV(M::AbstractMatrix) = [M[:,i] for i in axes(M, 2)]
 M2VM(M::AbstractMatrix) = [reshape(M[:,i], size(M,1), 1) for i in axes(M, 2)]
 
-V2M(V::AbstractVector) = reshape(V, :, 1)
-V2Mt(V::AbstractVector) = hcat(V...)
-VV2M(V::AbstractVector) = hcat(V...)
-VM2M(V::AbstractVector) = hcat(V...)
-VM2V(V::AbstractVector) = M2V(hcat(V...))
+function Base.copyto!(M::AbstractMatrix{T}, v::AbstractVector{AbstractVector{T}}; dim::Integer) where {T}
+    for i in eachindex(v)
+        copyto!(selectdim(M, dim, i), v[i])
+    end
+end
+
+# V2M(V::AbstractVector) = reshape(V, :, 1)
+# V2Mt(V::AbstractVector) = hcat(V...)
+# VV2M(V::AbstractVector) = hcat(V...)
+# VM2M(V::AbstractVector) = hcat(V...)
+# VM2V(V::AbstractVector) = M2V(hcat(V...))
 
 xx(v) = [0 -v[3] v[2]; v[3] 0 -v[1]; -v[2] v[1] 0]
 xx2v(xx) = [-xx[2,3], xx[1,3], -xx[1,2]]
@@ -22,8 +27,16 @@ eye(T, n::Integer) = Matrix{T}(I(n))
 num_mons(n::Integer, d::Integer) = n > 0 ? binomial(n - 1 + d, d) : 0
 num_mons_upto(n::Integer, d::Integer) = n > 0 ? binomial(n + d, d) : 0
 
+# TODO: Number => Int ?
+function modV(v::Vector{<:Number}, n::Number)::Vector{<:Number}
+    if iszero(n)
+        return v
+    end
+    return [mod(vᵢ, n) for vᵢ in v]
+end
+
 # TODO: test this
-function sparsify!(v::AbstractVector{<:Number}; tol::Real=1e-5, digits::Integer=0)
+function sparsify!(v::AbstractVector{<:Number}, tol::Real; digits::Integer=0)
     for j in eachindex(v)
         if abs(imag(v[j])) < tol
             v[j] = real(v[j])
@@ -38,9 +51,9 @@ function sparsify!(v::AbstractVector{<:Number}; tol::Real=1e-5, digits::Integer=
     end
 end
 
-function sparsify!(M::AbstractMatrix{<:Number}; tol::Real=1e-5, digits::Integer=0)
+function sparsify!(M::AbstractMatrix{<:Number}, tol::Real; digits::Integer=0)
     for i in axes(M, 1)
-        sparsify!(view(M, i, :); tol=tol, digits=digits)
+        sparsify!(view(M, i, :), tol; digits=digits)
     end
 end
 
@@ -80,7 +93,28 @@ function superscriptnumber(n::Integer)::String
     return join(c)
 end
 
-Base.findfirst(v::Vector{<:Number}, M::M)
+Base.findfirst(
+    v::AbstractVector{<:Number},
+    M::AbstractMatrix{<:Number};
+    tol::Real=1e-5
+) = findfirst(i->norm(M[:,i]-v)<tol, axes(M,2))
+
+function Base.filter(f::Function, M::AbstractMatrix, dim::Integer)
+    if dim == 1
+
+    elseif dim == 2
+
+    end
+end
+
+# TODO: extend Base.filter?
+function _remove_zero_rows(M::AbstractMatrix{<:Number})
+    nonzero_rows = filter(!iszero, collect(eachrow(M)))
+    if length(nonzero_rows) == 0
+        return Matrix{eltype(M)}(undef, 0, size(M, 2))
+    end
+    return transpose(hcat(nonzero_rows...))
+end
 
 # function exprDet(M; expnd=true)
 #     n = size(M, 1)

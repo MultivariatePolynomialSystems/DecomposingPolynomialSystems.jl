@@ -1,14 +1,14 @@
-using DecomposingPolynomialSystems, HomotopyContinuation, LinearAlgebra
-using BenchmarkTools
+using DecomposingPolynomialSystems
+using HomotopyContinuation, LinearAlgebra, BenchmarkTools
 
 @var R[1:3,1:3] t[1:3] α[1:5], β[1:5], x[1:3,1:5], y[1:3,1:5], a[1:4]
-eqs = vcat(M2V(R'*R - I), [det(R) - 1])
+eqs = vcat((R'*R - I)[:], [det(R) - 1])
 for i in 1:5
     append!(eqs, β[i]*y[:,i] - R*α[i]*x[:,i] - t)
 end
 push!(eqs, a'*[t; 1])
 
-F = System(eqs; variables = vcat(M2V(R), t, α, β), parameters = vcat(M2V(x), M2V(y), a))
+F = System(eqs; variables = vcat(R[:], t, α, β), parameters = vcat(x[:], y[:], a))
 
 function fabricateSample()
     R₁ = eye(CC, 3)
@@ -20,17 +20,17 @@ function fabricateSample()
     y = [R₂ t₂]*a2p(X)
     α, β = ones(CC, 5), ones(CC, 5)
     n = nullspace(reshape([t₂; 1], 1, 4))
-    a = M2V(n*randn(CC, size(n, 2)))
-    return (vcat(M2V(R₂), t₂, α, β), vcat(M2V(x), M2V(y), a))
+    a = n*randn(CC, size(n, 2))[:]
+    return (vcat(R₂[:], t₂, α, β), vcat(x[:], y[:], a))
 end
 
 xp0 = fabricateSample()
 F = run_monodromy(F, xp0)
 sample_system!(F, 10)
 
-d = 3
+d = Int8(3)
 n_variables(F)
-MDs = multidegrees_up_to_total_degree(n_variables(F), d)
+MDs = multidegrees_affine(n_variables(F), d)
 
 evaluate_monomials_at_samples(MDs, F.samples) # < 2 sec
 @btime evaluate_monomials_at_samples(MDs, F.samples);

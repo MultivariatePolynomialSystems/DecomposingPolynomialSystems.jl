@@ -1,13 +1,15 @@
 include("interpolation.jl")
 
-export DeckTransformationGroup, ScalingSymmetryGroup
-export show_map
-export scaling_symmetries, _verify_commutativity
-export symmetries_fixing_parameters_dense!, symmetries_fixing_parameters_graded!
-export symmetries_fixing_parameters!, symmetries_fixing_parameters
+export DeckTransformationGroup, 
+    ScalingSymmetryGroup,
+    scaling_symmetries,
+    symmetries_fixing_parameters_dense!,
+    symmetries_fixing_parameters_graded!,
+    symmetries_fixing_parameters!,
+    symmetries_fixing_parameters
 
 struct DeckTransformationGroup
-    maps::Vector{RationalMap}
+    maps::Vector{ExpressionMap}
     structure::String
     F::SampledSystem
 end
@@ -18,10 +20,10 @@ function DeckTransformationGroup(F::SampledSystem)
 end
 
 function DeckTransformationGroup(
-    symmetries::Vector{Vector{NoExpression}},
+    symmetries::Vector{Vector{MiExpression}},
     F::SampledSystem
 )
-    action = [RationalMap(variables(F), vcat(symmetry, parameters(F))) for symmetry in symmetries]
+    action = [ExpressionMap(variables(F), vcat(symmetry, parameters(F))) for symmetry in symmetries]
     return DeckTransformationGroup(action, group_structure(F.deck_permutations), F)
 end
 
@@ -38,9 +40,8 @@ function Base.show(io::IO, deck::DeckTransformationGroup)
     end
 end
 
-Base.getindex(deck::DeckTransformationGroup, i::Int) = deck.maps[i]
+Base.getindex(deck::DeckTransformationGroup, inds...) = getindex(deck.maps, inds...)
 
-# TODO: make pretty printing
 struct ScalingSymmetryGroup
     grading::Grading
     vars::Vector{Variable}
@@ -49,6 +50,7 @@ end
 
 ScalingSymmetryGroup() = ScalingSymmetryGroup([], [], [])
 
+# TODO: replace finite λ vars to multiplications by roots of unity?
 function ScalingSymmetryGroup(grading::Grading, vars::Vector{Variable})
     action = Vector{Tuple{Int, Dict{Variable, Expression}}}([])
     k = 0
@@ -76,17 +78,35 @@ function Base.show(io::IO, scalings::ScalingSymmetryGroup)
             n_finite += size(Uᵢ, 1)
         end
     end
-    println(io, "ScalingSymmetryGroup with $(n_infinite+n_finite) scalings")
-    println(io, " infinite scalings: $(n_infinite)")
-    println(io, " finite scalings:")
-    for (i, (sᵢ, Uᵢ)) in enumerate(scalings.grading)
-        if sᵢ == 0 continue end
-        println(io, "  $(size(Uᵢ, 1)) of order $(sᵢ)")
+    print(io, "ScalingSymmetryGroup with $(n_infinite+n_finite) scaling")
+    n_infinite + n_finite == 1 ? print(io, "\n") : print(io, "s\n")
+    n_infinite + n_finite == 0 && return
+    if n_infinite != 0
+        print(io, " $(n_infinite) infinite scaling")
+        n_infinite == 1 ? print(io, ":") : print(io, "s:")
+        for (sᵢ, scaling) in scalings.action
+            if sᵢ == 0
+                print(io, "\n  ")
+                for (j, var) in enumerate(scalings.vars)
+                    if !isnothing(get(scaling, var, nothing))
+                        print(io, var, " ↦ ", scaling[var])
+                        j < length(scalings.vars) && print(io, ", ")
+                    end
+                end
+            end
+        end
     end
-    print(io, " vars: ", join(scalings.vars, ", "))
+    if n_finite != 0
+        println(io, " finite scalings:")
+        for (i, (sᵢ, Uᵢ)) in enumerate(scalings.grading)
+            if sᵢ == 0 continue end
+            println(io, "  $(size(Uᵢ, 1)) of order $(sᵢ)")
+        end
+    end
+    # print(io, " vars: ", join(scalings.vars, ", "))
 end
 
-function _mat2col_diffs(M)
+function _mat2col_diffs(M::AbstractMatrix{<:Number})
     M = M - M[:,1]*ones(eltype(M), 1, size(M,2))
     return M[:,2:end]
 end
@@ -94,7 +114,7 @@ end
 function _snf_scaling_symmetries(F::System)::Tuple{Vector{Int}, Vector{Matrix{Int}}}
     vars = vcat(F.variables, F.parameters)
     Es = [exponents_coefficients(f, vars)[1] for f in F.expressions]
-    K = VM2M([_mat2col_diffs(E) for E in Es])
+    K = hcat([_mat2col_diffs(E) for E in Es]...)
     if size(K, 1) > size(K, 2)
         K = [K zeros(eltype(K), size(K, 1), size(K,1)-size(K,2))]
     end
@@ -108,10 +128,7 @@ function _snf_scaling_symmetries(F::System)::Tuple{Vector{Int}, Vector{Matrix{In
         return [], []
     end
     idxs = [findall(x->x==el, S) for el in s]
-    Us = Vector{Matrix{Int}}([])
-    for i in eachindex(idxs)
-        push!(Us, U[idxs[i], :])
-    end
+    Us = [U[idxs[i], :] for i in eachindex(idxs)]
     return s, Us # TODO: what if max(Us[i]) > MAX_INT64?
 end
 
@@ -155,19 +172,10 @@ function scaling_symmetries(F::System; in_hnf::Bool=true)::ScalingSymmetryGroup
     return ScalingSymmetryGroup(grading, vars)
 end
 
-function scaling_symmetries(F::SampledSystem; in_hnf::Bool=true)::ScalingSymmetryGroup
-    return scaling_symmetries(F.system; in_hnf=in_hnf)
-end
+scaling_symmetries(F::SampledSystem; in_hnf::Bool=true) = scaling_symmetries(F.system; in_hnf=in_hnf)
 
-function _remove_zero_rows(M::Matrix)::Matrix
-    nonzero_rows = filter(!iszero, M2VV(transpose(M)))
-    if length(nonzero_rows) == 0
-        return Matrix{eltype(M)}(undef, 0, size(M, 2))
-    end
-    return transpose(VV2M(nonzero_rows))
-end
-
-function _remove_zero_rows(grading::Grading)::Grading
+# TODO: extend to remove rows dependent on other blocks
+function _reduce(grading::Grading)::Grading
     filtered_grading = Grading([])
     for (i, (sᵢ, Uᵢ)) in enumerate(grading)
         Uᵢ = _remove_zero_rows(Uᵢ)
@@ -178,11 +186,6 @@ function _remove_zero_rows(grading::Grading)::Grading
     return filtered_grading
 end
 
-function _remove_dependencies(grading::Grading)::Grading
-    # TODO: remove rows dependent on other blocks
-    return grading
-end
-
 # TODO: what if vars is not a subset of scalings.vars?
 function _restrict_scalings(scalings::ScalingSymmetryGroup, vars::Vector{Variable})::ScalingSymmetryGroup
     idx = [findfirst(v->v==var, scalings.vars) for var in vars]
@@ -191,20 +194,14 @@ function _restrict_scalings(scalings::ScalingSymmetryGroup, vars::Vector{Variabl
         restr_grading[i] = (sᵢ, Uᵢ[:, idx])
     end
     _hnf_reduce!(restr_grading)
-    restr_grading = _remove_dependencies(_remove_zero_rows(restr_grading))
-    return ScalingSymmetryGroup(restr_grading, vars)
+    return ScalingSymmetryGroup(_reduce(restr_grading), vars)
 end
 
-function scaling_symmetries(F::System, vars::Vector{Variable})::ScalingSymmetryGroup
-    return _restrict_scalings(scaling_symmetries(F), vars)
-end
+scaling_symmetries(F::System, vars::Vector{Variable}) = _restrict_scalings(scaling_symmetries(F), vars)
+scaling_symmetries(F::SampledSystem, vars::Vector{Variable}) = scaling_symmetries(F.system, vars)
 
-function scaling_symmetries(F::SampledSystem, vars::Vector{Variable})::ScalingSymmetryGroup
-    return scaling_symmetries(F.system, vars)
-end
-
-function _num_deg2denom_deg(num_deg::Vector{Int}, grading::Grading, var_id::Int)::Vector{Int}
-    denom_deg = zeros(Int, length(num_deg))
+function _num_deg2denom_deg(num_deg::Vector{<:Integer}, grading::Grading, var_id::Integer)
+    denom_deg = zeros(eltype(num_deg), length(num_deg))
     k = 1
     for (sᵢ, Uᵢ) in grading
         n_scalings = size(Uᵢ, 1)
@@ -240,26 +237,26 @@ function _remove_zero_nums_and_denoms(
 end
 
 function _remove_zero_nums_and_denoms(
-    coeffs::Matrix{CC},
+    coeffs::Matrix{<:Number},
     mons::MonomialVector;
     logging::Bool=false
-)::Matrix{CC}
+)
 
     return _remove_zero_nums_and_denoms(coeffs, mons, mons, logging=logging)
 end
 
 function _vandermonde_matrix(
     permutation::Vector{Int},
-    values::SubArray{CC, 2},
-    eval_num_mons::Array{CC, 3},
-    eval_denom_mons::Array{CC, 3}
-)::Matrix{CC}
+    values::AbstractArray{T, 2},
+    eval_num_mons::AbstractArray{T, 3},
+    eval_denom_mons::AbstractArray{T, 3}
+) where {T<:Number}
 
     n_sols, n_instances = size(values)
     n_num_mons = size(eval_num_mons, 1)
     n_denom_mons = size(eval_denom_mons, 1)
 
-    A = zeros(CC, n_instances*n_sols, n_num_mons+n_denom_mons)
+    A = zeros(T, n_instances*n_sols, n_num_mons+n_denom_mons)
     @assert size(A, 1) >= size(A, 2)
 
     for i in 1:n_sols
@@ -273,41 +270,43 @@ end
 
 function _vandermonde_matrix(
     permutation::Vector{Int}, 
-    values::SubArray{CC, 2}, 
-    eval_mons::Array{CC, 3}
-)::Matrix{CC}
+    values::AbstractArray{T, 2},
+    eval_mons::AbstractArray{T, 3}
+) where {T<:Number}
 
     return _vandermonde_matrix(permutation, values, eval_mons, eval_mons)
 end
 
-function _all_interpolated(symmetries::Vector{Vector{NoExpression}})::Bool
+function _all_interpolated(symmetries::Vector{Vector{MiExpression}})
     all_interpolated = true
     for symmetry in symmetries
-        if nothing in symmetry
-            all_interpolated = false
-            break
+        for expr in symmetry
+            if ismissing(expr)
+                all_interpolated = false
+                break
+            end
         end
     end
     return all_interpolated
 end
 
-function _init_symmetries(n_symmetries::Int, unknowns::Vector{Variable})::Vector{Vector{NoExpression}}
-    symmetries = [[nothing for j in eachindex(unknowns)] for i in 1:n_symmetries]
-    symmetries = Vector{Vector{NoExpression}}(symmetries)
+function _init_symmetries(n_symmetries::Int, unknowns::Vector{Variable})
+    symmetries = [[missing for j in eachindex(unknowns)] for i in 1:n_symmetries]
+    symmetries = Vector{Vector{MiExpression}}(symmetries)
     symmetries[1] = Expression.(unknowns)  # set the first to the identity
     return symmetries
 end
 
 function _interpolate_symmetry_function(
-    permutation::Vector{Int},
+    permutation::Vector{<:Integer},
     values::SubArray{CC, 2},
     eval_num_mons::Array{CC, 3},
     eval_denom_mons::Array{CC, 3},
     num_mons::MonomialVector,
     denom_mons::MonomialVector,
-    tol::Float64;
+    tol::Real;
     logging::Bool=false
-)::NoExpression
+)
 
     logging && println(
         "Creating vandermonde matrix of size ",
@@ -316,32 +315,30 @@ function _interpolate_symmetry_function(
     A = _vandermonde_matrix(permutation, values, eval_num_mons, eval_denom_mons)
 
     logging && println("Computing nullspace...")
-    coeffs = Matrix{CC}(transpose(nullspace(A)))
+    coeffs = transpose(nullspace(A))
     logging && println("Size of the transposed nullspace: ", size(coeffs))
 
-    if size(coeffs, 1) == 0
-        return nothing
-    end
+    if size(coeffs, 1) == 0 return missing end
 
     logging && println("Computing the reduced row echelon form of the transposed nullspace...\n")
-    coeffs = sparsify(rref(coeffs, tol), tol, digits=1)
+    coeffs = rref(coeffs, tol)
+    
+    sparsify!(coeffs, tol; digits=1)
     coeffs = _remove_zero_nums_and_denoms(coeffs, num_mons, denom_mons)
+    if size(coeffs, 1) == 0 return missing end
 
-    if size(coeffs, 1) == 0
-        return nothing
-    end
     coeffs = good_representative(coeffs)
     return rational_function(coeffs, num_mons, denom_mons; logging=false, tol=tol)
 end
 
 function _interpolate_symmetry_function(
-    permutation::Vector{Int},
-    values::SubArray{CC, 2},
+    permutation::Vector{<:Integer},
+    values::SubArray{CC, 2}, # TODO: extend
     eval_mons::Array{CC, 3},
     mons::MonomialVector,
-    tol::Float64;
+    tol::Real;
     logging::Bool=false
-)
+)::MiExpression
 
     return _interpolate_symmetry_function(
         permutation,
@@ -360,7 +357,7 @@ function symmetries_fixing_parameters_graded!(
     scalings::ScalingSymmetryGroup,
     mds::Vector{Multidegree},
     classes::Dict{Vector{Int}, Vector{Int}};
-    tol::Float64=1e-5,
+    tol::Real=1e-5,
     logging::Bool=false
 )::DeckTransformationGroup
     
@@ -388,7 +385,7 @@ function symmetries_fixing_parameters_graded!(
                     end
                     eval_denom_mons = evaluate_monomials_at_samples_(denom_mons, F.samples)
                     for (j, symmetry) in enumerate(symmetries)
-                        if isnothing(symmetry[i])
+                        if ismissing(symmetry[i])
                             symmetry[i] = _interpolate_symmetry_function(
                                 C[j],
                                 view(F.samples.solutions, i, :, :),
@@ -399,7 +396,7 @@ function symmetries_fixing_parameters_graded!(
                                 tol;
                                 logging=logging
                             )
-                            if !isnothing(symmetry[i])
+                            if !ismissing(symmetry[i])
                                 logging && printstyled(
                                     "Good representative for the ",
                                     to_ordinal(j),
@@ -428,8 +425,8 @@ end
 function symmetries_fixing_parameters_graded!(
     F::SampledSystem,
     scalings::ScalingSymmetryGroup;
-    degree_bound::Int=1,
-    tol::Float64=1e-5,
+    degree_bound::Integer=1,
+    tol::Real=1e-5,
     logging::Bool=false
 )::DeckTransformationGroup
 
@@ -447,9 +444,9 @@ end
 
 function symmetries_fixing_parameters_dense!(
     F::SampledSystem; 
-    degree_bound::Int=1,
+    degree_bound::Integer=1,
     param_dep::Bool=true,
-    tol::Float64=1e-5,
+    tol::Real=1e-5,
     logging::Bool=false
 )::DeckTransformationGroup
 
@@ -460,7 +457,7 @@ function symmetries_fixing_parameters_dense!(
     symmetries = _init_symmetries(length(C), unknowns(F))
 
     for d in 1:degree_bound
-        logging && printstyled("Started interpolation for degree = ", d, "...\n", color=:green)
+        logging && printstyled("Started interpolation for degree = ", d, "...\n"; color=:green)
         mons = monomials(vars, d)
         n_instances = Int(ceil(2/n_sols*length(mons)))
         sample_system!(F, n_instances)
@@ -469,9 +466,9 @@ function symmetries_fixing_parameters_dense!(
         evaluated_mons = evaluate_monomials_at_samples_(mons, F.samples)
         
         for (i, symmetry) in enumerate(symmetries)
-            logging && printstyled("Interpolating the ", i, "-th symmetry map...\n", color=:blue)
+            logging && printstyled("Interpolating the ", i, "-th symmetry map...\n"; color=:blue)
             for j in 1:n_unknowns
-                if isnothing(symmetry[j])
+                if ismissing(symmetry[j])
                     symmetry[j] = _interpolate_symmetry_function(
                         C[i],
                         view(F.samples.solutions, j, :, :),
@@ -480,13 +477,13 @@ function symmetries_fixing_parameters_dense!(
                         tol;
                         logging=logging
                     )
-                    if !isnothing(symmetry[j])
+                    if !ismissing(symmetry[j])
                         logging && printstyled(
                             "Good representative for the ",
                             i,
                             "-th symmetry, variable ",
                             unknowns(F)[j],
-                            ":\n",
+                            ":\n";
                             color=:red
                         )
                         logging && println(symmetry[j])
@@ -496,7 +493,7 @@ function symmetries_fixing_parameters_dense!(
         end
     
         if _all_interpolated(symmetries)
-            logging && printstyled("--- All symmetries are interpolated ---\n", color=:blue)
+            logging && printstyled("--- All symmetries are interpolated ---\n"; color=:blue)
             return DeckTransformationGroup(symmetries, F)
         end
     end
@@ -504,14 +501,10 @@ function symmetries_fixing_parameters_dense!(
     return DeckTransformationGroup(symmetries, F)
 end
 
-function to_CC(scaling::Tuple{Int, Vector{Int}})::Vector{CC}
-    return [exp(2*pi*im*k/scaling[1]) for k in scaling[2]]
-end
-
-Base.findfirst(sol::Vector{CC}, sols::Matrix{CC}; tol::Float64=1e-5) = findfirst(x->norm(x-sol)<tol, M2VV(sols))
+to_CC(scaling::Tuple{Int, Vector{Int}}) = [exp(2*pi*im*k/scaling[1]) for k in scaling[2]]
 
 # verify for all of the solutions in 1 instance
-function _all_deck_commute(F::SampledSystem, scaling::Tuple{Int, Vector{Int}}; tol::Float64=1e-5)::Bool
+function _all_deck_commute(F::SampledSystem, scaling::Tuple{<:Integer, Vector{<:Integer}}; tol::Real=1e-5)::Bool
     instance_id = rand(1:size(F.samples.solutions, 3))
     sols1 = F.samples.solutions[:, :, instance_id]
     params1 = F.samples.parameters[:, instance_id]
@@ -523,7 +516,7 @@ function _all_deck_commute(F::SampledSystem, scaling::Tuple{Int, Vector{Int}}; t
     for perm in F.deck_permutations
         for i in axes(sols1, 2)
             Φ_sol = to_CC(scaling)[1:n_unknowns(F)].*sols1[:, i]
-            id = findfirst(Φ_sol, sols2, tol)
+            id = findfirst(Φ_sol, sols2; tol=tol)
             if isnothing(id) return false end
             ΨΦ_sol = sols2[:, perm[id]]
             Ψ_sol = sols1[:, perm[i]]
@@ -543,23 +536,27 @@ function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingSymmet
             continue
         end
         Vᵢ = Array{Int}(undef, 0, size(Uᵢ, 2))
+        # Uᵢ ↦ all linear combinations of rows of Uᵢ
         for j in axes(Uᵢ, 1)
             if _all_deck_commute(F, (sᵢ, Uᵢ[j, :]))
-                Vᵢ = [Vᵢ; V2Mt(Uᵢ[j, :])]
+                Vᵢ = [Vᵢ; hcat(Uᵢ[j, :]...)]
             end
         end
         if size(Vᵢ, 1) > 0
             push!(final_grading, (sᵢ, Vᵢ))
         end
     end
+    _hnf_reduce!(final_grading)
+
+    # hnf_reduce + remove_zero_rows in Vᵢ
     return ScalingSymmetryGroup(final_grading, scalings.vars)
 end
 
 function symmetries_fixing_parameters!(
     F::SampledSystem;
-    degree_bound::Int=1,
+    degree_bound::Integer=1,
     param_dep::Bool=true,
-    tol::Float64=1e-5,
+    tol::Real=1e-5,
     logging::Bool=false
 )::DeckTransformationGroup
 
@@ -592,10 +589,10 @@ end
 
 function symmetries_fixing_parameters(  # TODO: extend to take a rational map
     F::System,
-    (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}};
-    degree_bound::Int=1,
+    (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}};  # TODO: make optional arg?
+    degree_bound::Integer=1,
     param_dep::Bool=true,
-    tol::Float64=1e-5,
+    tol::Real=1e-5,
     monodromy_options::Tuple=(),
     logging::Bool=false
 )::DeckTransformationGroup
@@ -644,9 +641,9 @@ DeckTransformationGroup of order 4
 """
 function symmetries_fixing_parameters(  # TODO: extend to take a rational map
     F::System;
-    degree_bound::Int=1,
+    degree_bound::Integer=1,
     param_dep::Bool=true,
-    tol::Float64=1e-5,
+    tol::Real=1e-5,
     monodromy_options::Tuple=(),
     logging::Bool=false
 )::DeckTransformationGroup
