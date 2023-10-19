@@ -1,6 +1,9 @@
 export Monomial,
     MonomialVector,
-    monomials
+    monomials,
+    to_expressions,
+    to_classes,
+    only_param_dep
 
 Grading = Vector{Tuple{Int, Matrix{Int}}}
 
@@ -26,11 +29,17 @@ mutable struct MonomialVector{T<:Integer} # <: AbstractVector{Monomial}
     end
 end
 
-MonomialVector(mds::Vector{Vector{T}}, vars::Vector{Variable}) where {T<:Integer} = MonomialVector{T}(mds, vars)
+MonomialVector(
+    mds::Vector{Vector{T}},
+    vars::Vector{Variable}
+) where {T<:Integer} = MonomialVector{T}(mds, vars)
 
 Base.length(mons::MonomialVector) = length(mons.mds)
 Base.getindex(mons::MonomialVector, i::Integer) = Monomial(mons.mds[i], mons.vars)
-Base.getindex(mons::MonomialVector, inds...) = MonomialVector(getindex(mons.mds, inds...), mons.vars)
+Base.getindex(
+    mons::MonomialVector,
+    inds...
+) = MonomialVector(getindex(mons.mds, inds...), mons.vars)
 
 # TODO
 function Base.show(io::IO, mons::MonomialVector)
@@ -50,7 +59,11 @@ function multidegrees_affine(n::Integer, d::T) where {T<:Integer}
     return vcat([multidegrees_homogeneous(n, i) for i::T in 0:d]...)
 end
 
-function HomotopyContinuation.monomials(vars::Vector{Variable}, d::Integer; homogeneous::Bool=false)
+function monomials(
+    vars::Vector{Variable},
+    d::Integer;
+    homogeneous::Bool=false
+)
     homogeneous && return MonomialVector(multidegrees_homogeneous(length(vars), d), vars)
     return MonomialVector(multidegrees_affine(length(vars), d), vars)
 end
@@ -64,17 +77,17 @@ function Base.gcd(mons::MonomialVector)
     return Monomial(vec(minimum(hcat(mds...); dims=2)), mons.vars)
 end
 
-function HomotopyContinuation.degree(md::Multidegree, grading::Grading)
+function HC.degree(md::Vector{<:Integer}, grading::Grading)
     return vcat([modV(Uᵢ*md, sᵢ) for (sᵢ, Uᵢ) in grading]...)
 end
 
-HomotopyContinuation.degree(mon::Monomial, grading::Grading) = degree(mon.md, grading)
+HC.degree(mon::Monomial, grading::Grading) = degree(mon.md, grading)
 
 # TODO: Can we save multidegrees immediately?
-function to_classes(mds::Vector{Multidegree}, grading::Grading)
+function to_classes(mons::MonomialVector, grading::Grading)
     classes = Dict{Vector{Int}, Vector{Int}}()
-    for (i, md) in enumerate(mds)
-        deg = degree_wrt_grading(md, grading)
+    for (i, md) in enumerate(mons.mds)
+        deg = HC.degree(md, grading)
         if isnothing(get(classes, deg, nothing)) # the key doesn't exist
             classes[deg] = [i]
         else
@@ -84,65 +97,10 @@ function to_classes(mds::Vector{Multidegree}, grading::Grading)
     return classes
 end
 
-only_param_dep(md::Multidegree, n_unknowns::Integer) = iszero(md[1:n_unknowns])
+only_param_dep(md::Vector{<:Integer}, n_unknowns::Integer) = iszero(md[1:n_unknowns])
 only_param_dep(mon::Monomial, n_unknowns::Integer) = only_param_dep(mon.md, n_unknowns)
 only_param_dep(
-    mds::Vector{Multidegree},
+    mds::Vector{Vector{<:Integer}},
     n_unknowns::Integer
 ) = all([only_param_dep(md, n_unknowns) for md in mds])
 only_param_dep(mons::MonomialVector, n_unknowns::Integer) = only_param_dep(mons.mds, n_unknowns)
-
-# supposes each md in mds is a multidegree in both unknowns and parameters
-# TODO: The implementation below (with _) is more efficient (approx 2x),
-# TODO: since it exploits the sparsity of multidegrees. REMOVE THIS METHOD?
-function HomotopyContinuation.evaluate(mons::MonomialVector, samples::VarietySamples)
-    solutions = samples.solutions
-    parameters = samples.parameters
-
-    n_unknowns, n_sols, n_instances = size(solutions)
-    mds = mons.mds
-    n_mds = length(mds)
-
-    evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
-    for i in 1:n_instances
-        params = view(parameters, :, i)
-        params_eval = [prod(params.^md[n_unknowns+1:end]) for md in mds]
-        sols = view(solutions, :, :, i)
-        for j in 1:n_mds
-            evaluated_mons[j, :, i] = vec(prod(sols.^mds[j][1:n_unknowns], dims=1)).*params_eval[j]
-        end
-    end
-    return evaluated_mons
-end
-
-# TODO: consider view for slices
-function evaluate_monomials_at_samples_(
-    mons::MonomialVector,
-    samples::VarietySamples;
-    sparse::Bool=false
-)
-    solutions = samples.solutions
-    parameters = samples.parameters
-
-    n_unknowns, n_sols, n_instances = size(solutions)
-    mds = mons.mds
-    n_mds = length(mds)
-
-    nonzero_ids_unknowns = [findall(!iszero, md[1:n_unknowns]) for md in mds]
-    nonzero_ids_params = [findall(!iszero, md[n_unknowns+1:end]) for md in mds]
-
-    evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
-    for i in 1:n_instances
-        params = view(parameters, :, i)
-        sols = view(solutions, :, :, i)
-        for (j, md) in enumerate(mds)
-            params_part = params[nonzero_ids_params[j]]
-            md_params_part = md[n_unknowns+1:end][nonzero_ids_params[j]]
-            params_eval = prod(params_part.^md_params_part)
-            sols_part = view(sols, nonzero_ids_unknowns[j], :)
-            md_sols_part = md[1:n_unknowns][nonzero_ids_unknowns[j]]
-            evaluated_mons[j, :, i] = vec(prod(sols_part.^md_sols_part, dims=1)).*params_eval
-        end
-    end
-    return evaluated_mons
-end

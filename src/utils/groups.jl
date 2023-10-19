@@ -1,13 +1,12 @@
 export group_structure, permutations_to_group, group_to_permutations
 
+# TODO: & -> &&, use eachcol
 function filter_permutations(perms::Matrix{Int})::Vector{Vector{Int}}
     nsols = length(perms[:,1])
     return filter!(x->!(0 in x) & (length(unique(x)) == nsols), [perms[:,i] for i in 1:size(perms, 2)])
 end
 
-function group_structure(G::GapObj)::GapObj
-    return GAP.Globals.StructureDescription(G)
-end
+group_structure(G::GapObj) = GAP.Globals.StructureDescription(G)
 
 function group_structure(perms::Vector{Vector{Int}})::String
     return GAP.gap_to_julia(GAP.Globals.StructureDescription(permutations_to_group(perms)))

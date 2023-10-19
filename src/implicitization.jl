@@ -1,3 +1,5 @@
+export implicitize
+
 function evaluate_map_at_samples(factorizing_map::FactorizingMap, block_partition::Vector{Vector{Int}}, F::SampledSystem)::Array{ComplexF64, 3}
     n_unknowns = length(factorizing_map.map)
     n_blocks = length(block_partition)

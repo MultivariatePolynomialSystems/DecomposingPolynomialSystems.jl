@@ -1,5 +1,3 @@
-include("interpolation.jl")
-
 export DeckTransformationGroup, 
     ScalingSymmetryGroup,
     scaling_symmetries,
@@ -8,7 +6,8 @@ export DeckTransformationGroup,
     symmetries_fixing_parameters!,
     symmetries_fixing_parameters
 
-MiExpression = Union{Missing, Expression}
+using HomotopyContinuation: exponents_coefficients
+using AbstractAlgebra: matrix, snf_with_transform, ZZ, hnf, GF, lift
 
 struct DeckTransformationGroup
     maps::Vector{ExpressionMap}
@@ -108,8 +107,8 @@ function Base.show(io::IO, scalings::ScalingSymmetryGroup)
     # print(io, " vars: ", join(scalings.vars, ", "))
 end
 
-function _mat2col_diffs(M::AbstractMatrix{<:Number})
-    M = M - M[:,1]*ones(eltype(M), 1, size(M,2))
+function _mat2col_diffs(M::AbstractMatrix{T}) where {T<:Number}
+    M = M - M[:,1]*ones(T, 1, size(M,2))
     return M[:,2:end]
 end
 
@@ -357,7 +356,7 @@ end
 function symmetries_fixing_parameters_graded!(
     F::SampledSystem,
     scalings::ScalingSymmetryGroup,
-    mds::Vector{Multidegree},
+    mons::MonomialVector,
     classes::Dict{Vector{Int}, Vector{Int}};
     tol::Real=1e-5,
     logging::Bool=false
@@ -373,14 +372,14 @@ function symmetries_fixing_parameters_graded!(
     sample_system!(F, n_instances)
     
     for (num_deg, num_ids) in classes
-        num_mons = MonomialVector(mds[num_ids], scalings.vars)
+        num_mons = mons[num_ids]
         eval_num_mons = nothing
         for i in 1:n_unknowns
             denom_deg = _num_deg2denom_deg(num_deg, scalings.grading, i)  # i-th variable
             denom_ids = get(classes, denom_deg, nothing)
             if !isnothing(denom_ids)
-                denom_mons = MonomialVector(mds[denom_ids], scalings.vars)
-                g = gcd_mds([gcd_mons(num_mons), gcd_mons(denom_mons)])  # TODO: rewrite
+                denom_mons = mons[denom_ids]
+                g = gcd(vcat(num_mons, denom_mons)...)
                 if iszero(g) && (!only_param_dep(num_mons, n_unknowns) || !only_param_dep(denom_mons, n_unknowns))  # TODO: rewrite
                     if isnothing(eval_num_mons)
                         eval_num_mons = evaluate_monomials_at_samples_(num_mons, F.samples)
@@ -432,12 +431,12 @@ function symmetries_fixing_parameters_graded!(
     logging::Bool=false
 )::DeckTransformationGroup
 
-    mds = multidegrees_up_to_total_degree(length(scalings.vars), degree_bound)
-    classes = partition_multidegrees(mds, scalings.grading)
+    mons = monomials(scalings.vars, degree_bound)
+    classes = to_classes(mons, scalings.grading)
     return symmetries_fixing_parameters_graded!(
         F,
         scalings,
-        mds,
+        mons,
         classes;
         tol=tol,
         logging=logging

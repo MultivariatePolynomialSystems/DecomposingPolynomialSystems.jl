@@ -1,4 +1,19 @@
-export SampledSystem
+export SampledSystem,
+    VarietySamples,
+    run_monodromy,
+    sample_system!,
+    unknowns,
+    parameters,
+    variables,
+    n_unknowns,
+    n_parameters,
+    n_variables
+
+using HomotopyContinuation:
+    MonodromyResult,
+    Result,
+    monodromy_solve,
+    solutions
 
 # TODO: think about other ways to represent samples
 struct VarietySamples
@@ -72,7 +87,7 @@ end
 
 unknowns(F::SampledSystem) = F.system.variables
 parameters(F::SampledSystem) = F.system.parameters
-HomotopyContinuation.variables(F::SampledSystem) = vcat(unknowns(F), parameters(F))
+variables(F::SampledSystem) = vcat(unknowns(F), parameters(F))
 
 # TODO: remove underscore?
 n_unknowns(F::SampledSystem) = length(unknowns(F))

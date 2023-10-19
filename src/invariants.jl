@@ -1,4 +1,4 @@
-export compute_invariants
+export invariants
 
 function num_constraints(block_partition::Vector{Vector{Int}})::Int
     return length(block_partition)*(length(block_partition[1])-1)
@@ -77,7 +77,7 @@ function interpolate_invariants(block_partition::Vector{Vector{Int}}, mons::Vect
     return inv_minors
 end
 
-function compute_invariants(F::SampledSystem; degree::Int, tol::Float64=1e-5, param_dep::Bool=true)::Vector{Matrix{ComplexF64}}
+function invariants(F::SampledSystem; degree::Int, tol::Float64=1e-5, param_dep::Bool=true)::Vector{Matrix{ComplexF64}}
     params = parameters(F.equations)
     param_dep ? vars = vcat(variables(F.equations), params) : vars = variables(F.equations)
     param_dep ? n_params = length(params) : n_params = 0
@@ -100,7 +100,7 @@ function compute_invariants(F::SampledSystem; degree::Int, tol::Float64=1e-5, pa
     return invs_minors
 end
 
-function compute_invariants(F::System, xp0::Tuple{Vector{ComplexF64}, Vector{ComplexF64}}; degree::Int=0, tol::Float64=1e-5, expected_n_sols::Int=0, param_dep::Bool=true)::Tuple{SampledSystem, Vector{FactorizingMap}}
+function invariants(F::System, xp0::Tuple{Vector{ComplexF64}, Vector{ComplexF64}}; degree::Int=0, tol::Float64=1e-5, expected_n_sols::Int=0, param_dep::Bool=true)::Tuple{SampledSystem, Vector{FactorizingMap}}
     F = run_monodromy(F, xp0, expected_n_sols=expected_n_sols)
 
     println("\nNumber of nontrivial block partitions: ", length(F.block_partitions), "\n")

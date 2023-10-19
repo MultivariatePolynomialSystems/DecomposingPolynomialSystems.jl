@@ -1,5 +1,7 @@
 export ExpressionMap
 
+MiExpression = Union{Missing, Expression}
+
 struct ExpressionMap
     domain_vars::Vector{Variable}
     image_vars::Vector{Variable}

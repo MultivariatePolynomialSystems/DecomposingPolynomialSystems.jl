@@ -227,3 +227,10 @@ end
 
 M = ones(Complex, 3, 3)
 test(M)
+
+Base.@kwdef struct Boo
+    a::Int = 1
+    b::String
+end
+
+f = Boo(b="Hi")

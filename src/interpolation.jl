@@ -1,7 +1,3 @@
-include("monomials.jl")
-
-import HomotopyContinuation: Expression
-
 export gcd_mds, mds2mons, only_param_dep
 export partition_multidegrees
 export interpolate_vanishing_polynomials
@@ -89,6 +85,61 @@ function vandermonde_matrix(values::ArrayOrSubArray(1), eval_mons::ArrayOrSubArr
     elseif func_type == "rational"
         return [transpose(eval_mons) -transpose(eval_mons).*values]
     end
+end
+
+# supposes each md in mds is a multidegree in both unknowns and parameters
+# TODO: The implementation below (with _) is more efficient (approx 2x),
+# TODO: since it exploits the sparsity of multidegrees. REMOVE THIS METHOD?
+function HomotopyContinuation.evaluate(mons::MonomialVector, samples::VarietySamples)
+    solutions = samples.solutions
+    parameters = samples.parameters
+
+    n_unknowns, n_sols, n_instances = size(solutions)
+    mds = mons.mds
+    n_mds = length(mds)
+
+    evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
+    for i in 1:n_instances
+        params = view(parameters, :, i)
+        params_eval = [prod(params.^md[n_unknowns+1:end]) for md in mds]
+        sols = view(solutions, :, :, i)
+        for j in 1:n_mds
+            evaluated_mons[j, :, i] = vec(prod(sols.^mds[j][1:n_unknowns], dims=1)).*params_eval[j]
+        end
+    end
+    return evaluated_mons
+end
+
+# TODO: consider view for slices
+function evaluate_monomials_at_samples_(
+    mons::MonomialVector,
+    samples::VarietySamples;
+    sparse::Bool=false
+)
+    solutions = samples.solutions
+    parameters = samples.parameters
+
+    n_unknowns, n_sols, n_instances = size(solutions)
+    mds = mons.mds
+    n_mds = length(mds)
+
+    nonzero_ids_unknowns = [findall(!iszero, md[1:n_unknowns]) for md in mds]
+    nonzero_ids_params = [findall(!iszero, md[n_unknowns+1:end]) for md in mds]
+
+    evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
+    for i in 1:n_instances
+        params = view(parameters, :, i)
+        sols = view(solutions, :, :, i)
+        for (j, md) in enumerate(mds)
+            params_part = params[nonzero_ids_params[j]]
+            md_params_part = md[n_unknowns+1:end][nonzero_ids_params[j]]
+            params_eval = prod(params_part.^md_params_part)
+            sols_part = view(sols, nonzero_ids_unknowns[j], :)
+            md_sols_part = md[1:n_unknowns][nonzero_ids_unknowns[j]]
+            evaluated_mons[j, :, i] = vec(prod(sols_part.^md_sols_part, dims=1)).*params_eval
+        end
+    end
+    return evaluated_mons
 end
 
 function interpolate(A::Matrix{CC}, mons::Vector{Expression}; func_type::String, tol::Float64=1e-5)

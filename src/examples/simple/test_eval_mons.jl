@@ -1,5 +1,5 @@
 using DecomposingPolynomialSystems
-using HomotopyContinuation, LinearAlgebra, BenchmarkTools
+using BenchmarkTools
 
 @var R[1:3,1:3] t[1:3] α[1:5], β[1:5], x[1:3,1:5], y[1:3,1:5], a[1:4]
 eqs = vcat((R'*R - I)[:], [det(R) - 1])
