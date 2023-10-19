@@ -24,8 +24,8 @@ function rational_function(coeffs::Vector{CC}, num_mons::MonomialVector, denom_m
     t = denominator[denominator .!= 0][1]
     numerator /= t
     denominator /= t
-    p = dot(numerator, mds2mons(num_mons.mds, num_mons.vars))
-    q = dot(denominator, mds2mons(denom_mons.mds, denom_mons.vars))
+    p = dot(numerator, to_expressions(num_mons))
+    q = dot(denominator, to_expressions(denom_mons))
     if logging
         println("rational function = ", p/q)
         println("numerator = ", p)
@@ -36,7 +36,7 @@ end
 
 function polynomial_function(coeffs::Vector{CC}, mons::MonomialVector; logging::Bool=true)::Expression
     @assert length(coeffs) == length(mons.mds)
-    p = dot(coeffs, mds2mons(mons.mds, mons.vars))
+    p = dot(coeffs, to_expressions(mons))
     if logging
         println("polynomial = ", p)
     end

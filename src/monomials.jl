@@ -5,11 +5,9 @@ export Monomial,
     to_classes,
     only_param_dep
 
-Grading = Vector{Tuple{Int, Matrix{Int}}}
-
 # TODO: remove?
 # TODO: extend Number or nothing at all?
-struct Monomial{T<:Integer} <: Number
+struct Monomial{T<:Integer} #<: Number
     md::Vector{T}
     vars::Vector{Variable}
 
@@ -18,6 +16,10 @@ struct Monomial{T<:Integer} <: Number
         return new(md, vars)
     end
 end
+
+Monomial(md::Vector{T}, vars::Vector{Variable}) where {T<:Integer} = Monomial{T}(md, vars)
+Base.isone(mon::Monomial) = iszero(mon.md)
+Base.show(io::IO, mon::Monomial) = show(io, prod(mon.vars.^mon.md))
 
 mutable struct MonomialVector{T<:Integer} # <: AbstractVector{Monomial}
     mds::Vector{Vector{T}}
@@ -40,6 +42,11 @@ Base.getindex(
     mons::MonomialVector,
     inds...
 ) = MonomialVector(getindex(mons.mds, inds...), mons.vars)
+
+function Base.vcat(monVs::MonomialVector...)
+    # TODO: check if mons.vars are all equal
+    MonomialVector(vcat([mons.mds for mons in monVs]...), monVs[1].vars)
+end
 
 # TODO
 function Base.show(io::IO, mons::MonomialVector)
@@ -64,43 +71,24 @@ function monomials(
     d::Integer;
     homogeneous::Bool=false
 )
+    
     homogeneous && return MonomialVector(multidegrees_homogeneous(length(vars), d), vars)
     return MonomialVector(multidegrees_affine(length(vars), d), vars)
 end
 
 function to_expressions(mons::MonomialVector)
     nonzero_ids = [findall(!iszero, md) for md in mons.mds]
-    return [prod(mons.vars[ids].^md[ids]) for (md, ids) in zip(mds, nonzero_ids)]
+    return [prod(mons.vars[ids].^md[ids]) for (md, ids) in zip(mons.mds, nonzero_ids)]
 end
 
 function Base.gcd(mons::MonomialVector)
-    return Monomial(vec(minimum(hcat(mds...); dims=2)), mons.vars)
-end
-
-function HC.degree(md::Vector{<:Integer}, grading::Grading)
-    return vcat([modV(Uᵢ*md, sᵢ) for (sᵢ, Uᵢ) in grading]...)
-end
-
-HC.degree(mon::Monomial, grading::Grading) = degree(mon.md, grading)
-
-# TODO: Can we save multidegrees immediately?
-function to_classes(mons::MonomialVector, grading::Grading)
-    classes = Dict{Vector{Int}, Vector{Int}}()
-    for (i, md) in enumerate(mons.mds)
-        deg = HC.degree(md, grading)
-        if isnothing(get(classes, deg, nothing)) # the key doesn't exist
-            classes[deg] = [i]
-        else
-            push!(classes[deg], i)
-        end
-    end
-    return classes
+    return Monomial(vec(minimum(hcat(mons.mds...); dims=2)), mons.vars)
 end
 
 only_param_dep(md::Vector{<:Integer}, n_unknowns::Integer) = iszero(md[1:n_unknowns])
 only_param_dep(mon::Monomial, n_unknowns::Integer) = only_param_dep(mon.md, n_unknowns)
 only_param_dep(
-    mds::Vector{Vector{<:Integer}},
+    mds::Vector{Vector{T}},
     n_unknowns::Integer
-) = all([only_param_dep(md, n_unknowns) for md in mds])
+) where {T<:Integer} = all([only_param_dep(md, n_unknowns) for md in mds])
 only_param_dep(mons::MonomialVector, n_unknowns::Integer) = only_param_dep(mons.mds, n_unknowns)

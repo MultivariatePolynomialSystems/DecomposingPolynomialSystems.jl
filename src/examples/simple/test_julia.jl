@@ -234,3 +234,10 @@ Base.@kwdef struct Boo
 end
 
 f = Boo(b="Hi")
+
+a = randn(10000)
+b1 = 2*ones(Int, 10000)
+b2 = Int8(2)*ones(Int8, 10000)
+using BenchmarkTools
+@btime c = a.^b1;
+@btime c = a.^b2;

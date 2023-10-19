@@ -68,17 +68,43 @@ function evaluate2(mons::MonomialVector, samples::VarietySamples)
     return evaluated_mons
 end
 
-d = Int8(3)
-mons = monomials(variables(F), d)
+function evaluate3(mons::MonomialVector, samples::VarietySamples)
+    solutions = samples.solutions
+    parameters = samples.parameters
 
-evaluate(mons, F.samples)
-@btime evaluate(mons, F.samples);
+    n_unknowns, n_sols, n_instances = size(solutions)
+    mds = mons.mds
+    n_mds = length(mds)
 
-evaluate_monomials_at_samples_(MDs, F.samples)
-@btime evaluate_monomials_at_samples_(MDs, F.samples);
+    nonzero_ids_unknowns = [findall(!iszero, md[1:n_unknowns]) for md in mds]
+    nonzero_ids_params = [findall(!iszero, md[n_unknowns+1:end]) for md in mds]
 
-vars = DecomposingPolynomialSystems.variables(F)
-mons = mds2mons(MDs, vars)
-evaluate_monomials_at_samples(mons, F.samples, vars) # 40 sec
-@btime evaluate_monomials_at_samples(mons, F.samples, vars);
-@profview evaluate_monomials_at_samples(mons, F.samples, vars);
+    evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
+    for i in 1:n_instances
+        params = view(parameters, :, i)
+        sols = view(solutions, :, :, i)
+        for (j, md) in enumerate(mds)
+            params_part = params[nonzero_ids_params[j]]
+            md_params_part = md[n_unknowns+1:end][nonzero_ids_params[j]]
+            params_eval = prod(params_part.^md_params_part)
+            sols_part = view(sols, nonzero_ids_unknowns[j], :)
+            md_sols_part = md[1:n_unknowns][nonzero_ids_unknowns[j]]
+            evaluated_mons[j, :, i] = vec(prod(sols_part.^md_sols_part, dims=1)).*params_eval
+        end
+    end
+    return evaluated_mons
+end
+
+d = 2
+monsInt8 = monomials(variables(F), Int8(d))
+monsInt = monomials(variables(F), d)
+
+@btime evaluate1(monsInt8, F.samples);
+@btime evaluate1(monsInt, F.samples);
+
+@btime evaluate2(monsInt8, F.samples);
+@btime evaluate2(monsInt, F.samples);
+
+# THE FASTEST
+@btime evaluate3(monsInt8, F.samples);
+@btime evaluate3(monsInt, F.samples);

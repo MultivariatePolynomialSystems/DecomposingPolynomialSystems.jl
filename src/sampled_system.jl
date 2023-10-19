@@ -94,7 +94,7 @@ n_unknowns(F::SampledSystem) = length(unknowns(F))
 n_parameters(F::SampledSystem) = length(parameters(F))
 n_variables(F::SampledSystem) = length(variables(F))
 
-function run_monodromy(F::System; options...)::SampledSystem
+function run_monodromy(F::System; options...)
     MR = monodromy_solve(F; permutations=true, options...)
     if length(solutions(MR)) == 1
         error("Just one solution was found, no monodromy group available. Try running again...")
@@ -102,7 +102,7 @@ function run_monodromy(F::System; options...)::SampledSystem
     return SampledSystem(F, MR)
 end
 
-function run_monodromy(F::System, (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}}; options...)::SampledSystem
+function run_monodromy(F::System, (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}}; options...)
     MR = monodromy_solve(F, [x₀], p₀; permutations=true, options...)
     if length(solutions(MR)) == 1
         error("No additional solutions were found, no monodromy group available. Try running again...")
@@ -111,7 +111,7 @@ function run_monodromy(F::System, (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}}; o
 end
 
 # TODO
-function run_monodromy(F::SampledSystem; options...)::SampledSystem
+function run_monodromy(F::SampledSystem; options...)
 
 end
 
