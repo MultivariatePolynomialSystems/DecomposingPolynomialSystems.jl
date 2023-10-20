@@ -4,8 +4,32 @@ export DeckTransformationGroup,
     symmetries_fixing_parameters!,
     symmetries_fixing_parameters
 
+struct DeckTransformation
+    exprs::Vector{MiExpression}
+    unknowns::Vector{Variable}
+    parameters::Vector{Variable}
+
+    function DeckTransformation(exprs, unknowns, parameters)
+        # TODO: verify args
+        return new(exprs, unknowns, parameters)
+    end
+end
+
+function Base.show(io::IO, dt::DeckTransformation)
+    println(
+        io,
+        "DeckTransformation: acts on $(length(dt.unknowns)) unknowns,",
+        " fixes $(length(dt.parameters)) parameters",
+    )
+    println(io, " action:")
+    for (unknown, expr) in zip(dt.unknowns, dt.exprs)
+        print(io, "  ", unknown, " ↦ ", expr)
+        i < length(dt.unknowns) && print(io, "\n")
+    end
+end
+
 struct DeckTransformationGroup
-    maps::Vector{ExpressionMap}
+    maps::Vector{DeckTransformation}
     structure::String
     F::SampledSystem
 end
@@ -19,7 +43,7 @@ function DeckTransformationGroup(
     symmetries::Vector{Vector{MiExpression}},
     F::SampledSystem
 )
-    action = [ExpressionMap(variables(F), vcat(symmetry, parameters(F))) for symmetry in symmetries]
+    action = [DeckTransformation(symmetry, unknowns(F), parameters(F)) for symmetry in symmetries]
     return DeckTransformationGroup(action, group_structure(F.deck_permutations), F)
 end
 
@@ -38,7 +62,7 @@ end
 
 Base.getindex(deck::DeckTransformationGroup, inds...) = getindex(deck.maps, inds...)
 
-function _num_deg2denom_deg(num_deg::Vector{<:Integer}, grading::Grading, var_id::Integer)
+function _num_deg2denom_deg(num_deg::Vector{Int}, grading::Grading, var_id::Int)
     denom_deg = zeros(eltype(num_deg), length(num_deg))
     k = 1
     for (sᵢ, Uᵢ) in grading
@@ -53,11 +77,11 @@ end
 # TODO: Do we need printing? Then passing mons isn't necessary, just their number
 # TODO: change the name of the method?
 function _remove_zero_nums_and_denoms(
-    coeffs::Matrix{CC},
+    coeffs::AbstractMatrix{CC},
     num_mons::MonomialVector,
     denom_mons::MonomialVector;
     logging::Bool=false
-)::Matrix{CC}
+)
 
     reasonable_rows = []
     n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
@@ -136,10 +160,10 @@ function _init_symmetries(n_symmetries::Int, unknowns::Vector{Variable})
 end
 
 function _interpolate_symmetry_function(
-    permutation::Vector{<:Integer},
-    values::SubArray{CC, 2},
-    eval_num_mons::Array{CC, 3},
-    eval_denom_mons::Array{CC, 3},
+    permutation::Vector{Int},
+    values::AbstractArray{CC, 2},
+    eval_num_mons::AbstractArray{CC, 3},
+    eval_denom_mons::AbstractArray{CC, 3},
     num_mons::MonomialVector,
     denom_mons::MonomialVector,
     tol::Real;
@@ -170,9 +194,9 @@ function _interpolate_symmetry_function(
 end
 
 function _interpolate_symmetry_function(
-    permutation::Vector{<:Integer},
-    values::SubArray{CC, 2}, # TODO: extend
-    eval_mons::Array{CC, 3},
+    permutation::Vector{Int},
+    values::AbstractArray{CC, 2},
+    eval_mons::AbstractArray{CC, 3},
     mons::MonomialVector,
     tol::Real;
     logging::Bool=false
@@ -342,7 +366,7 @@ end
 to_CC(scaling::Tuple{Int, Vector{Int}}) = [cis(2*pi*k/scaling[1]) for k in scaling[2]]
 
 # verify for all of the solutions in 1 instance
-function _all_deck_commute(F::SampledSystem, scaling::Tuple{<:Integer, Vector{<:Integer}}; tol::Real=1e-5)::Bool
+function _all_deck_commute(F::SampledSystem, scaling::Tuple{Int, Vector{Int}}; tol::Real=1e-5)::Bool
     instance_id = rand(1:size(F.samples.solutions, 3))
     sols1 = F.samples.solutions[:, :, instance_id]
     params1 = F.samples.parameters[:, instance_id]

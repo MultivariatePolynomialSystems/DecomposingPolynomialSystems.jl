@@ -16,6 +16,7 @@ using HomotopyContinuation:
     solutions
 
 # TODO: think about other ways to represent samples
+# TODO: make it parametric with T <: Number?
 struct VarietySamples
     solutions::Array{CC, 3} # n_unknowns x n_sols x n_instances
     parameters::Array{CC, 2} # n_params x n_instances

@@ -21,3 +21,8 @@ eqs = [2*w^2+1, 2*x+4*w*y+2*a, -3*y^2-z^2+4*a*w*y+2*b, -w*y^3-3*w*y*z^2-a*y^2-a*
 F = System(eqs; variables=[x,y,z,w], parameters=[a,b,c])
 F = run_monodromy(F)
 deck = symmetries_fixing_parameters!(F; degree_bound=1, param_dep=false)
+
+@var x a b
+md = Int8[1,2,3]
+vars = [x,a,b]
+m = Monomial(md, vars)
