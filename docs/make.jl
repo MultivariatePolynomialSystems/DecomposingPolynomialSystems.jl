@@ -6,20 +6,36 @@ DocMeta.setdocmeta!(DecomposingPolynomialSystems, :DocTestSetup, :(using Decompo
 makedocs(;
     modules=[DecomposingPolynomialSystems],
     authors="Viktor Korotynskiy <korotynskiy.viktor@gmail.com> and contributors",
-    repo="https://github.com/azoviktor/DecomposingPolynomialSystems.jl/blob/{commit}{path}#{line}",
+    repo="https://github.com/MultivariatePolynomialSystems/DecomposingPolynomialSystems.jl/blob/{commit}{path}#{line}",
     sitename="DecomposingPolynomialSystems.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://azoviktor.github.io/DecomposingPolynomialSystems.jl",
+        canonical="https://multivariatepolynomialsystems.github.io/DecomposingPolynomialSystems.jl",
         edit_link="main",
         assets=String[],
+        collapselevel=1
     ),
-    pages=[
-        "Home" => "index.md",
+    pages = [
+        "Introduction" => "index.md",
+        "Numerical Algebraic Geometry" => [
+            "Monodromy" => "NAG/monodromy.md",
+            "Symmetries" => "NAG/symmetries.md",
+        ],
+        "Data Types" => [
+            "SampledSystem" => "Types/sampled_system.md",
+            "SymmetryGroup" => "Types/symmetry_group.md",
+        ],
+        "Decomposing Polynomial Systems" => [
+            "Symmetries" => "SPS/symmetries.md",
+            "Invariants" => "SPS/invariants.md",
+        ],
+        "Examples from Algebraic Vision" => [
+            "5-point problem" => "AV/5pp.md",
+        ],
     ],
 )
 
 deploydocs(;
-    repo="github.com/azoviktor/DecomposingPolynomialSystems.jl",
+    repo="github.com/MultivariatePolynomialSystems/DecomposingPolynomialSystems.jl.git",
     devbranch="main",
 )

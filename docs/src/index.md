@@ -1,14 +1,6 @@
-```@meta
-CurrentModule = DecomposingPolynomialSystems
-```
+# Introduction
+*DecomposingPolynomialSystems.jl is a Julia package for decomposing systems of polynomial equations, i.e. representing a possibly complicated polynomial system as a sequence of simpler polynomial subsystems.*
 
-# DecomposingPolynomialSystems
-
-Documentation for [DecomposingPolynomialSystems](https://github.com/azoviktor/DecomposingPolynomialSystems.jl).
-
-```@index
-```
-
-```@autodocs
-Modules = [DecomposingPolynomialSystems]
-```
+## Package Features
+- Computing symmetries that fix the parameters of the polynomial system
+- Computing invariants... 

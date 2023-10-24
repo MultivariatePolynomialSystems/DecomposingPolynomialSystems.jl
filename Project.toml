@@ -3,5 +3,11 @@ uuid = "f22b1612-9f73-4f98-889e-ed5396e1a4da"
 authors = ["Viktor Korotynskiy <korotynskiy.viktor@gmail.com> and contributors"]
 version = "1.0.0-DEV"
 
+[deps]
+AbstractAlgebra = "c3fe647b-3220-5bb0-a1ea-a7954cac585d"
+GAP = "c863536a-3901-11e9-33e7-d5cd0df7b904"
+HomotopyContinuation = "f213a82b-91d6-5c5d-acf7-10f1c761b327"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
 [compat]
 julia = "1.8"
