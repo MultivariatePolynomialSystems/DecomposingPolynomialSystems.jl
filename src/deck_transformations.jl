@@ -27,7 +27,7 @@ function Base.show(io::IO, dt::DeckTransformation)
         " fixes $(length(dt.parameters)) $(param_str)",
     )
     println(io, " action:")
-    for i in length(dt.exprs)
+    for i in 1:length(dt.exprs)
         print(io, "  ", dt.unknowns[i], " ↦ ", dt.exprs[i])
         i < length(dt.exprs) && print(io, "\n")
     end
@@ -325,7 +325,7 @@ function symmetries_fixing_parameters_dense!(
 
     for d in 1:degree_bound
         logging && printstyled("Started interpolation for degree = ", d, "...\n"; color=:green)
-        mons = monomials(vars, d)
+        mons = MonomialVector{Int8}(vars, d)
         n_instances = Int(ceil(2/n_sols*length(mons)))
         sample_system!(F, n_instances)
 
