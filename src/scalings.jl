@@ -158,7 +158,7 @@ end
 function restrict_scalings(scalings::ScalingGroup, var_ids::Vector{Int})
     restr_grading = copy(scalings.grading)
     for (i, (sᵢ, Uᵢ)) in enumerate(scalings.grading)
-        restr_grading[i] = (sᵢ, Uᵢ[:, idx])
+        restr_grading[i] = (sᵢ, Uᵢ[:, var_ids])
     end
     return ScalingGroup(reduce(restr_grading), scalings.vars[var_ids])
 end
