@@ -38,7 +38,7 @@ MonomialVector(
 ) where {T<:Integer} = MonomialVector{T}(vars, mds)
 
 Base.length(mons::MonomialVector) = length(mons.mds)
-Base.getindex(mons::MonomialVector, i::Integer) = Monomial(mons.mds[i], mons.vars)
+Base.getindex(mons::MonomialVector, i::Integer) = Monomial(mons.vars, mons.mds[i])
 Base.getindex(
     mons::MonomialVector,
     inds...
@@ -86,7 +86,7 @@ function to_expressions(mons::MonomialVector)
 end
 
 function Base.gcd(mons::MonomialVector)
-    return Monomial(vec(minimum(hcat(mons.mds...); dims=2)), mons.vars)
+    return Monomial(mons.vars, vec(minimum(hcat(mons.mds...); dims=2)))
 end
 
 # Methods below suppose that vars = [unknowns, parameters]

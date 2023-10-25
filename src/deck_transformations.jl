@@ -1,4 +1,5 @@
-export DeckTransformationGroup,
+export DeckTransformation,
+    DeckTransformationGroup,
     symmetries_fixing_parameters_dense!,
     symmetries_fixing_parameters_graded!,
     symmetries_fixing_parameters!,
@@ -15,16 +16,20 @@ struct DeckTransformation
     end
 end
 
+Base.getindex(dt::DeckTransformation, inds...) = getindex(dt.exprs, inds...)
+
 function Base.show(io::IO, dt::DeckTransformation)
+    unkn_str = length(dt.unknowns) == 1 ? "unknown" : "unknowns"
+    param_str = length(dt.parameters) == 1 ? "parameter" : "parameters"
     println(
         io,
-        "DeckTransformation: acts on $(length(dt.unknowns)) unknowns,",
-        " fixes $(length(dt.parameters)) parameters",
+        "DeckTransformation: acts on $(length(dt.unknowns)) $(unkn_str),",
+        " fixes $(length(dt.parameters)) $(param_str)",
     )
     println(io, " action:")
-    for (unknown, expr) in zip(dt.unknowns, dt.exprs)
-        print(io, "  ", unknown, " ↦ ", expr)
-        i < length(dt.unknowns) && print(io, "\n")
+    for i in length(dt.exprs)
+        print(io, "  ", dt.unknowns[i], " ↦ ", dt.exprs[i])
+        i < length(dt.exprs) && print(io, "\n")
     end
 end
 
@@ -54,7 +59,7 @@ function Base.show(io::IO, deck::DeckTransformationGroup)
     for i in eachindex(deck.maps)
         println(io, "\n  ", to_ordinal(i), " map:")
         for (j, var) in enumerate(unknowns(deck.F))  # action on parameters is trivial, don't show it
-            print(io, "   ", var, " ↦ ", deck.maps[i][var])
+            print(io, "   ", var, " ↦ ", deck.maps[i][j])
             j < length(unknowns(deck.F)) && print(io, "\n")
         end
     end
@@ -99,7 +104,7 @@ function _remove_zero_nums_and_denoms(
 end
 
 function _remove_zero_nums_and_denoms(
-    coeffs::Matrix{<:Number},
+    coeffs::Matrix{<:Complex},
     mons::MonomialVector;
     logging::Bool=false
 )
@@ -112,7 +117,7 @@ function _vandermonde_matrix(
     values::AbstractArray{T, 2},
     eval_num_mons::AbstractArray{T, 3},
     eval_denom_mons::AbstractArray{T, 3}
-) where {T<:Number}
+) where {T<:Complex}
 
     n_sols, n_instances = size(values)
     n_num_mons = size(eval_num_mons, 1)
@@ -134,7 +139,7 @@ function _vandermonde_matrix(
     permutation::Vector{Int}, 
     values::AbstractArray{T, 2},
     eval_mons::AbstractArray{T, 3}
-) where {T<:Number}
+) where {T<:Complex}
 
     return _vandermonde_matrix(permutation, values, eval_mons, eval_mons)
 end
@@ -161,14 +166,14 @@ end
 
 function _interpolate_symmetry_function(
     permutation::Vector{Int},
-    values::AbstractArray{CC, 2},
-    eval_num_mons::AbstractArray{CC, 3},
-    eval_denom_mons::AbstractArray{CC, 3},
+    values::AbstractArray{T, 2},
+    eval_num_mons::AbstractArray{T, 3},
+    eval_denom_mons::AbstractArray{T, 3},
     num_mons::MonomialVector,
     denom_mons::MonomialVector,
     tol::Real;
     logging::Bool=false
-)
+) where {T<:Complex}
 
     logging && println(
         "Creating vandermonde matrix of size ",
@@ -195,12 +200,12 @@ end
 
 function _interpolate_symmetry_function(
     permutation::Vector{Int},
-    values::AbstractArray{CC, 2},
-    eval_mons::AbstractArray{CC, 3},
+    values::AbstractArray{T, 2},
+    eval_mons::AbstractArray{T, 3},
     mons::MonomialVector,
     tol::Real;
     logging::Bool=false
-)::MiExpression
+) where {T<:Complex}
 
     return _interpolate_symmetry_function(
         permutation,
@@ -221,7 +226,7 @@ function symmetries_fixing_parameters_graded!(
     classes::Dict{Vector{Int}, Vector{Int}};
     tol::Real=1e-5,
     logging::Bool=false
-)::DeckTransformationGroup
+)
     
     max_n_mons = max(length.(collect(values(classes)))...)  # size of the largest class
     n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
@@ -290,9 +295,9 @@ function symmetries_fixing_parameters_graded!(
     degree_bound::Integer=1,
     tol::Real=1e-5,
     logging::Bool=false
-)::DeckTransformationGroup
+)
 
-    mons = monomials(scalings.vars, degree_bound)
+    mons = MonomialVector{Int8}(scalings.vars, degree_bound)
     classes = to_classes(mons, scalings.grading)
     return symmetries_fixing_parameters_graded!(
         F,
@@ -310,10 +315,10 @@ function symmetries_fixing_parameters_dense!(
     param_dep::Bool=true,
     tol::Real=1e-5,
     logging::Bool=false
-)::DeckTransformationGroup
+)
 
     n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
-    vars = param_dep ? variables(F) : unknowns(F)  # rename vars --> interp_vars?
+    vars = param_dep ? variables(F) : unknowns(F)  # TODO: rename vars --> interp_vars?
 
     C = F.deck_permutations
     symmetries = _init_symmetries(length(C), unknowns(F))
@@ -408,10 +413,7 @@ function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingGroup)
             push!(final_grading, (sᵢ, Vᵢ))
         end
     end
-    _hnf_reduce!(final_grading)
-
-    # hnf_reduce + remove_zero_rows in Vᵢ
-    return ScalingGroup(final_grading, scalings.vars)
+    return ScalingGroup(reduce(final_grading), scalings.vars)
 end
 
 function symmetries_fixing_parameters!(
@@ -428,7 +430,7 @@ function symmetries_fixing_parameters!(
 
     # scalings = scaling_symmetries(F)
     scalings = _scalings_commuting_with_deck(F, scaling_symmetries(F))
-    scalings = param_dep ? scalings : _restrict_scalings(scalings, unknowns(F))
+    scalings = param_dep ? scalings : restrict_scalings(scalings, unknowns(F))
     if length(scalings.grading) == 0
         return symmetries_fixing_parameters_dense!(
             F;

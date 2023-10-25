@@ -4,7 +4,7 @@ export ScalingGroup,
 using HomotopyContinuation: exponents_coefficients
 using AbstractAlgebra: matrix, snf_with_transform, ZZ, hnf, GF, lift
 
-Grading = Vector{Tuple{Int, Matrix{Int}}}
+Grading = Vector{Tuple{Int, Matrix{Int}}}  # TODO: make it struct?
 
 struct ScalingGroup
     grading::Grading
@@ -125,7 +125,7 @@ ScalingGroup with 2 scalings
  vars: x₁, x₂, p₁, p₂
 ```
 """
-function scaling_symmetries(F::System; in_hnf::Bool=true)::ScalingGroup
+function scaling_symmetries(F::System; in_hnf::Bool=true)
     s, U = _snf_scaling_symmetries(F)
     if length(s) == 0
         return ScalingGroup()
@@ -136,13 +136,18 @@ function scaling_symmetries(F::System; in_hnf::Bool=true)::ScalingGroup
     return ScalingGroup(grading, vars)
 end
 
-scaling_symmetries(F::SampledSystem; in_hnf::Bool=true) = scaling_symmetries(F.system; in_hnf=in_hnf)
+scaling_symmetries(
+    F::SampledSystem;
+    in_hnf::Bool=true
+) = scaling_symmetries(F.system; in_hnf=in_hnf)
 
 # TODO: extend to remove rows dependent on other blocks
-function _reduce(grading::Grading)::Grading
+function reduce(grading::Grading)
+    grading_cp = copy(grading)
+    _hnf_reduce!(grading_cp)
     filtered_grading = Grading([])
-    for (i, (sᵢ, Uᵢ)) in enumerate(grading)
-        Uᵢ = _remove_zero_rows(Uᵢ)
+    for (i, (sᵢ, Uᵢ)) in enumerate(grading_cp)
+        Uᵢ = remove_zero_rows(Uᵢ)
         if size(Uᵢ, 1) != 0
             push!(filtered_grading, (sᵢ, Uᵢ))
         end
@@ -150,19 +155,31 @@ function _reduce(grading::Grading)::Grading
     return filtered_grading
 end
 
-# TODO: what if vars is not a subset of scalings.vars?
-function _restrict_scalings(scalings::ScalingGroup, vars::Vector{Variable})::ScalingGroup
-    idx = [findfirst(v->v==var, scalings.vars) for var in vars]
+function restrict_scalings(scalings::ScalingGroup, var_ids::Vector{Int})
     restr_grading = copy(scalings.grading)
     for (i, (sᵢ, Uᵢ)) in enumerate(scalings.grading)
         restr_grading[i] = (sᵢ, Uᵢ[:, idx])
     end
-    _hnf_reduce!(restr_grading)
-    return ScalingGroup(_reduce(restr_grading), vars)
+    return ScalingGroup(reduce(restr_grading), scalings.vars[var_ids])
 end
 
-scaling_symmetries(F::System, vars::Vector{Variable}) = _restrict_scalings(scaling_symmetries(F), vars)
-scaling_symmetries(F::SampledSystem, vars::Vector{Variable}) = scaling_symmetries(F.system, vars)
+# TODO: what if vars is not a subset of scalings.vars?
+function restrict_scalings(scalings::ScalingGroup, vars::Vector{Variable})
+    ids = [findfirst(v->v==var, scalings.vars) for var in vars]
+    if nothing in ids 
+        throw(ArgumentError("vars contains variables not present in scalings.vars"))
+    end
+    return restrict_scalings(scalings, ids)
+end
+
+scaling_symmetries(
+    F::System,
+    vars::Vector{Variable}
+) = restrict_scalings(scaling_symmetries(F), vars)
+scaling_symmetries(
+    F::SampledSystem,
+    vars::Vector{Variable}
+) = scaling_symmetries(F.system, vars)
 
 function HC.degree(md::Vector{<:Integer}, grading::Grading)
     return vcat([mod(Uᵢ*md, sᵢ) for (sᵢ, Uᵢ) in grading]...)

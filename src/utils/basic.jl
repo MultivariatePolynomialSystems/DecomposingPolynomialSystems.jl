@@ -1,7 +1,3 @@
-export a2p, p2a, M2VV, M2VM, xx, xx2v, eye
-export num_mons, num_mons_upto
-export sparsify!, to_ordinal, subscriptnumber, superscriptnumber
-
 a2p(M::AbstractMatrix{<:Number}) = [M; ones(eltype(M), 1, size(M, 2))]
 p2a(M::AbstractMatrix{<:Number}) = (M./M[end:end,:])[1:end-1,:]
 
@@ -105,7 +101,7 @@ function Base.filter(f::Function, M::AbstractMatrix, dim::Integer)
 end
 
 # TODO: extend Base.filter?
-function _remove_zero_rows(M::AbstractMatrix{<:Number})
+function remove_zero_rows(M::AbstractMatrix{<:Number})
     nonzero_rows = filter(!iszero, collect(eachrow(M)))
     if length(nonzero_rows) == 0
         return Matrix{eltype(M)}(undef, 0, size(M, 2))

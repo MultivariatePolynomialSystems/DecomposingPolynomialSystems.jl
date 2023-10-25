@@ -76,10 +76,10 @@ function Base.show(io::IO, F::SampledSystem)
     sols = F.samples.solutions
     n_samples = size(sols, 2)*size(sols, 3)
     println(io, "SampledSystem with $(n_samples) samples")
-    print(io, " $(n_unknowns(F)) unknowns: ", join(unknowns(F), ", "))
-    if !isempty(parameters(F))
-        print(io, "\n $(n_parameters(F)) parameters: ", join(parameters(F), ", "))
-    end
+    # print(io, " $(n_unknowns(F)) unknowns: ", join(unknowns(F), ", "))
+    # if !isempty(parameters(F))
+    #     print(io, "\n $(n_parameters(F)) parameters: ", join(parameters(F), ", "))
+    # end
     print(io, "\n\n")
     println(io, " number of solutions: $(size(sols, 2))")
     println(io, " number of instances: $(size(sols, 3))")
@@ -103,6 +103,7 @@ function run_monodromy(F::System; options...)
     return SampledSystem(F, MR)
 end
 
+# TODO: make (x₀, p₀) optional?
 function run_monodromy(F::System, (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}}; options...)
     MR = monodromy_solve(F, [x₀], p₀; permutations=true, options...)
     if length(solutions(MR)) == 1
@@ -175,7 +176,7 @@ function sample_system!(F::SampledSystem, n_instances::Int)
         sols = M2VV(F.samples.solutions[:, :, 1])
         target_params = [randn(CC, length(p0)) for _ in 1:(n_instances-n_computed_instances)]
 
-        println("Solving ", n_instances-n_computed_instances, " instances by homotopy continutation...")
+        # println("Solving ", n_instances-n_computed_instances, " instances by homotopy continutation...")
         data_points = HomotopyContinuation.solve(
             F.system,
             sols,
