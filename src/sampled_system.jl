@@ -76,13 +76,13 @@ function Base.show(io::IO, F::SampledSystem)
     sols = F.samples.solutions
     n_samples = size(sols, 2)*size(sols, 3)
     println(io, "SampledSystem with $(n_samples) samples")
-    # print(io, " $(n_unknowns(F)) unknowns: ", join(unknowns(F), ", "))
-    # if !isempty(parameters(F))
-    #     print(io, "\n $(n_parameters(F)) parameters: ", join(parameters(F), ", "))
-    # end
+    print(io, " $(n_unknowns(F)) unknowns: ", join(unknowns(F), ", "))
+    if !isempty(parameters(F))
+        print(io, "\n $(n_parameters(F)) parameters: ", join(parameters(F), ", "))
+    end
     print(io, "\n\n")
     println(io, " number of solutions: $(size(sols, 2))")
-    println(io, " number of instances: $(size(sols, 3))")
+    println(io, " number of sampled instances: $(size(sols, 3))")
     print(io, " number of deck permutations: $(length(F.deck_permutations))")
 end
 
@@ -95,19 +95,19 @@ n_unknowns(F::SampledSystem) = length(unknowns(F))
 n_parameters(F::SampledSystem) = length(parameters(F))
 n_variables(F::SampledSystem) = length(variables(F))
 
-function run_monodromy(F::System; options...)
-    MR = monodromy_solve(F; permutations=true, options...)
-    if length(solutions(MR)) == 1
-        error("Just one solution was found, no monodromy group available. Try running again...")
+function run_monodromy(
+    F::System,
+    xp₀::Union{Nothing, Tuple{Vector{CC}, Vector{CC}}}=nothing;
+    options...
+)
+    if isnothing(xp₀)
+        MR = monodromy_solve(F; permutations=true, options...)
+    else
+        x₀, p₀ = xp₀
+        MR = monodromy_solve(F, [x₀], p₀; permutations=true, options...)
     end
-    return SampledSystem(F, MR)
-end
-
-# TODO: make (x₀, p₀) optional?
-function run_monodromy(F::System, (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}}; options...)
-    MR = monodromy_solve(F, [x₀], p₀; permutations=true, options...)
     if length(solutions(MR)) == 1
-        error("No additional solutions were found, no monodromy group available. Try running again...")
+        error("Only 1 solution found, no monodromy group available. Try running again...")
     end
     return SampledSystem(F, MR)
 end

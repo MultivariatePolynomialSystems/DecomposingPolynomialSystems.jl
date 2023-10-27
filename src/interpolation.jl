@@ -2,17 +2,19 @@ export gcd_mds, mds2mons, only_param_dep
 export partition_multidegrees
 export interpolate_vanishing_polynomials
 
-function ArrayOrSubArray(dim::Int)
-    return Union{Array{CC, dim}, SubArray{CC, dim}}
-end
-
 function check_func_type(func_type::String)
     if (func_type != "polynomial" && func_type != "rational")
         error("func_type argument must be either \"polynomial\" or \"rational\"")
     end
 end
 
-function rational_function(coeffs::Vector{CC}, num_mons::MonomialVector, denom_mons::MonomialVector; logging::Bool=true, tol::Float64=1e-5)::Expression
+function rational_function(
+    coeffs::AbstractVector{CC},
+    num_mons::MonomialVector,
+    denom_mons::MonomialVector;
+    logging::Bool=true,
+    tol::Float64=1e-5
+)
     n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
     @assert length(coeffs) == n_num_mons + n_denom_mons
     numerator, denominator = coeffs[1:n_num_mons], coeffs[n_num_mons+1:end]
@@ -34,16 +36,24 @@ function rational_function(coeffs::Vector{CC}, num_mons::MonomialVector, denom_m
     return p/q
 end
 
-function polynomial_function(coeffs::Vector{CC}, mons::MonomialVector; logging::Bool=true)::Expression
+function polynomial_function(
+    coeffs::AbstractVector{CC},
+    mons::MonomialVector;
+    logging::Bool=true
+)
     @assert length(coeffs) == length(mons.mds)
     p = dot(coeffs, to_expressions(mons))
-    if logging
-        println("polynomial = ", p)
-    end
+    logging && println("polynomial = ", p)
     return p
 end
 
-function reconstruct_function(coeffs::Vector{CC}, mons::MonomialVector; func_type::String, logging::Bool=true, tol::Float64=1e-5)
+function reconstruct_function(
+    coeffs::AbstractVector{CC},
+    mons::MonomialVector;
+    func_type::String,
+    logging::Bool=true,
+    tol::Float64=1e-5
+)
     check_func_type(func_type)
     if func_type == "rational"
         return rational_function(coeffs, mons, mons, logging=logging, tol=tol)
@@ -52,23 +62,35 @@ function reconstruct_function(coeffs::Vector{CC}, mons::MonomialVector; func_typ
     end
 end
 
-function rational_functions(coeffs::Matrix{CC}, num_mons::MonomialVector, denom_mons::MonomialVector; logging::Bool=true, tol::Float64=1e-5)
+function rational_functions(
+    coeffs::AbstractMatrix{CC},
+    num_mons::MonomialVector,
+    denom_mons::MonomialVector;
+    logging::Bool=true,
+    tol::Float64=1e-5
+)
     for k in eachindex(axes(coeffs, 1))
         rational_function(coeffs[k,:], num_mons, denom_mons, logging=logging, tol=tol)
         println()
     end
 end
 
-function reconstruct_functions(coeffs::Matrix{CC}, mons::Vector{Expression}; func_type::String, printing::Bool=true, tol::Float64=1e-5)
+function reconstruct_functions(
+    coeffs::AbstractMatrix{CC},
+    mons::MonomialVector;
+    func_type::String,
+    logging::Bool=true,
+    tol::Float64=1e-5
+)
     
 end
 
-function good_representative(coeffs::Matrix{CC})::Vector{CC}
+function good_representative(coeffs::AbstractMatrix{CC})
     return coeffs[findmin(vec(sum(coeffs .!= 0, dims=2)))[2], :]
 end
 
 # NOT READY YET...
-function best_representative(rational_functions::Matrix{CC}, tol::Float64)::Vector{CC}
+function best_representative(rational_functions::AbstractMatrix{CC}, tol::Float64)
     n_mons = Int(size(rational_functions, 2)/2)
     A = rational_functions[:,n_mons+1:end]
     A = [-1 zeros(1, n_mons-1); A]
@@ -78,7 +100,11 @@ function best_representative(rational_functions::Matrix{CC}, tol::Float64)::Vect
     return nothing
 end
 
-function vandermonde_matrix(values::ArrayOrSubArray(1), eval_mons::ArrayOrSubArray(2), func_type::String)::Matrix{CC}
+function vandermonde_matrix(
+    values::AbstractVector{CC},
+    eval_mons::AbstractMatrix{CC},
+    func_type::String
+)
     check_func_type(func_type)
     if func_type == "polynomial"
         return [transpose(eval_mons) -values]
@@ -90,28 +116,28 @@ end
 # supposes each md in mds is a multidegree in both unknowns and parameters
 # TODO: The implementation below (with _) is more efficient (approx 2x),
 # TODO: since it exploits the sparsity of multidegrees. REMOVE THIS METHOD?
-function HomotopyContinuation.evaluate(mons::MonomialVector, samples::VarietySamples)
-    solutions = samples.solutions
-    parameters = samples.parameters
+# function HomotopyContinuation.evaluate(mons::MonomialVector, samples::VarietySamples)
+#     solutions = samples.solutions
+#     parameters = samples.parameters
 
-    n_unknowns, n_sols, n_instances = size(solutions)
-    mds = mons.mds
-    n_mds = length(mds)
+#     n_unknowns, n_sols, n_instances = size(solutions)
+#     mds = mons.mds
+#     n_mds = length(mds)
 
-    evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
-    for i in 1:n_instances
-        params = view(parameters, :, i)
-        params_eval = [prod(params.^md[n_unknowns+1:end]) for md in mds]
-        sols = view(solutions, :, :, i)
-        for j in 1:n_mds
-            evaluated_mons[j, :, i] = vec(prod(sols.^mds[j][1:n_unknowns], dims=1)).*params_eval[j]
-        end
-    end
-    return evaluated_mons
-end
+#     evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
+#     for i in 1:n_instances
+#         params = view(parameters, :, i)
+#         params_eval = [prod(params.^md[n_unknowns+1:end]) for md in mds]
+#         sols = view(solutions, :, :, i)
+#         for j in 1:n_mds
+#             evaluated_mons[j, :, i] = vec(prod(sols.^mds[j][1:n_unknowns], dims=1)).*params_eval[j]
+#         end
+#     end
+#     return evaluated_mons
+# end
 
 # TODO: consider view for slices
-function evaluate_monomials_at_samples_(
+function HC.evaluate(
     mons::MonomialVector,
     samples::VarietySamples;
     sparse::Bool=false
@@ -142,7 +168,12 @@ function evaluate_monomials_at_samples_(
     return evaluated_mons
 end
 
-function interpolate(A::Matrix{CC}, mons::Vector{Expression}; func_type::String, tol::Float64=1e-5)
+function interpolate(
+    A::AbstractMatrix{CC},
+    mons::MonomialVector;
+    func_type::String,
+    tol::Float64=1e-5
+)
     check_func_type(func_type)
     @assert size(A, 1) >= size(A, 2)
     if func_type == "polynomial"
@@ -166,13 +197,24 @@ end
 # If samples are generated from a proper subvariety X ⊂ Cⁿ, then the method returns just one representative f
 # of the equivalence class of functions f+I(X) with the given values. Obviously, if X = Cⁿ, then there is only
 # one such function.
-function interpolate(values::ArrayOrSubArray(1), mons::Vector{Expression}, eval_mons::ArrayOrSubArray(2); func_type::String, tol::Float64=1e-5)
+function interpolate(
+    values::AbstractVector{CC},
+    mons::MonomialVector,
+    eval_mons::AbstractMatrix{CC};
+    func_type::String,
+    tol::Float64=1e-5
+)
     check_func_type(func_type)
     A = vandermonde_matrix(values, eval_mons, func_type)
     return interpolate(A, mons, func_type=func_type, tol=tol)
 end
 
-function interpolate_vanishing_polynomials(samples::VarietySamples, vars::Vector{Variable}, mons::Vector{Expression}; tol::Float64=1e-5)
+function interpolate_vanishing_polynomials(
+    samples::VarietySamples,
+    vars::Vector{Variable},
+    mons::MonomialVector;
+    tol::Float64=1e-5
+)
     A = evaluate_monomials_at_samples(mons, samples, vars)
     A = reshape(A, size(A, 1), size(A, 2)*size(A, 3))
     N = Matrix{CC}(transpose(nullspace(transpose(A))))
@@ -180,7 +222,12 @@ function interpolate_vanishing_polynomials(samples::VarietySamples, vars::Vector
     return N*mons
 end
 
-function interpolate_vanishing_polynomials(samples::ArrayOrSubArray(2), vars::Vector{Variable}, mons::Vector{Expression}; tol::Float64=1e-5)::Vector{Expression}
+function interpolate_vanishing_polynomials(
+    samples::AbstractMatrix{CC},
+    vars::Vector{Variable},
+    mons::MonomialVector;
+    tol::Float64=1e-5
+)
     @assert size(samples, 1) == length(vars)
     @assert size(samples, 2) >= length(mons)
     A = evaluate_monomials_at_samples(mons, samples, vars)
@@ -189,15 +236,37 @@ function interpolate_vanishing_polynomials(samples::ArrayOrSubArray(2), vars::Ve
     return N*mons
 end
 
-function interpolate_dense(samples::ArrayOrSubArray(2), values::ArrayOrSubArray(1); vars::Vector{Variable}, degree::Int, func_type::String, tol::Float64=1e-5)
+function interpolate_dense(
+    samples::AbstractMatrix{CC},
+    values::AbstractVector{CC};
+    vars::Vector{Variable},
+    degree::Int,
+    func_type::String,
+    tol::Float64=1e-5
+)
     
 end
 
-function interpolate_sparse(samples::ArrayOrSubArray(2), values::ArrayOrSubArray(1); vars::Vector{Variable}, degree::Int, func_type::String, tol::Float64=1e-5)
+function interpolate_sparse(
+    samples::AbstractMatrix{CC},
+    values::AbstractVector{CC};
+    vars::Vector{Variable},
+    degree::Int,
+    func_type::String,
+    tol::Float64=1e-5
+)
     
 end
 
-function interpolate(samples::ArrayOrSubArray(2), values::ArrayOrSubArray(1); vars::Vector{Variable}, degree::Int, func_type::String, method::String, tol::Float64=1e-5)
+function interpolate(
+    samples::AbstractMatrix{CC},
+    values::AbstractVector{CC};
+    vars::Vector{Variable},
+    degree::Int,
+    func_type::String,
+    method::String,
+    tol::Float64=1e-5
+)
     if method == "dense"
         return interpolate_dense(samples, values; vars=vars, degree=degree, func_type=func_type, tol=tol)
     elseif method == "sparse"

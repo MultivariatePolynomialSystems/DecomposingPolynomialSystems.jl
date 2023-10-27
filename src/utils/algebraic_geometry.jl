@@ -1,4 +1,4 @@
-using HomotopyContinuation: System, differentiate
+using HomotopyContinuation: differentiate
 export jac
 
 function jac(F::System)

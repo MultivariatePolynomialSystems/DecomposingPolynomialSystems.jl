@@ -1,9 +1,19 @@
 export DeckTransformation,
     DeckTransformationGroup,
+    Tolerances,
     symmetries_fixing_parameters_dense!,
     symmetries_fixing_parameters_graded!,
     symmetries_fixing_parameters!,
     symmetries_fixing_parameters
+
+Base.@kwdef struct Tolerances
+    nullspace_atol::Float64=0
+    nullspace_rtol::Float64=0
+    rref_tol::Float64
+    sparsify_tol::Float64
+end
+
+Tolerances(tol::Real) = Tolerances(rref_tol=tol, sparsify_tol=tol)
 
 struct DeckTransformation
     exprs::Vector{MiExpression}
@@ -91,7 +101,7 @@ function _remove_zero_nums_and_denoms(
     reasonable_rows = []
     n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
     @assert size(coeffs, 2) == n_num_mons + n_denom_mons
-    for i in 1:size(coeffs, 1)
+    for i in axes(coeffs, 1)
         if (!all(iszero, coeffs[i, 1:n_num_mons]) && !all(iszero, coeffs[i, n_num_mons+1:end]))
             push!(reasonable_rows, i)
         elseif logging
@@ -114,7 +124,7 @@ end
 
 function _vandermonde_matrix(
     permutation::Vector{Int},
-    values::AbstractArray{T, 2},
+    values::AbstractMatrix{T},
     eval_num_mons::AbstractArray{T, 3},
     eval_denom_mons::AbstractArray{T, 3}
 ) where {T<:Complex}
@@ -136,8 +146,8 @@ function _vandermonde_matrix(
 end
 
 function _vandermonde_matrix(
-    permutation::Vector{Int}, 
-    values::AbstractArray{T, 2},
+    permutation::Vector{Int},
+    values::AbstractMatrix{T},
     eval_mons::AbstractArray{T, 3}
 ) where {T<:Complex}
 
@@ -166,12 +176,12 @@ end
 
 function _interpolate_symmetry_function(
     permutation::Vector{Int},
-    values::AbstractArray{T, 2},
+    values::AbstractMatrix{T},
     eval_num_mons::AbstractArray{T, 3},
     eval_denom_mons::AbstractArray{T, 3},
     num_mons::MonomialVector,
     denom_mons::MonomialVector,
-    tol::Real;
+    tols::Tolerances;
     logging::Bool=false
 ) where {T<:Complex}
 
@@ -182,20 +192,25 @@ function _interpolate_symmetry_function(
     A = _vandermonde_matrix(permutation, values, eval_num_mons, eval_denom_mons)
 
     logging && println("Computing nullspace...")
-    coeffs = transpose(nullspace(A))
+    if tols.nullspace_rtol == 0
+        N = nullspace(A, atol=tols.nullspace_atol)
+    else
+        N = nullspace(A, atol=tols.nullspace_atol, rtol=tols.nullspace_rtol)
+    end
+    coeffs = transpose(N)
     logging && println("Size of the transposed nullspace: ", size(coeffs))
 
     if size(coeffs, 1) == 0 return missing end
 
     logging && println("Computing the reduced row echelon form of the transposed nullspace...\n")
-    coeffs = rref(coeffs, tol)
+    coeffs = rref(coeffs, tols.rref_tol)
     
-    sparsify!(coeffs, tol; digits=1)
+    sparsify!(coeffs, tols.sparsify_tol; digits=1)
     coeffs = _remove_zero_nums_and_denoms(coeffs, num_mons, denom_mons)
     if size(coeffs, 1) == 0 return missing end
 
     coeffs = good_representative(coeffs)
-    return rational_function(coeffs, num_mons, denom_mons; logging=false, tol=tol)
+    return rational_function(coeffs, num_mons, denom_mons; logging=false, tol=tols.sparsify_tol)
 end
 
 function _interpolate_symmetry_function(
@@ -203,7 +218,7 @@ function _interpolate_symmetry_function(
     values::AbstractArray{T, 2},
     eval_mons::AbstractArray{T, 3},
     mons::MonomialVector,
-    tol::Real;
+    tols::Tolerances;
     logging::Bool=false
 ) where {T<:Complex}
 
@@ -214,7 +229,7 @@ function _interpolate_symmetry_function(
         eval_mons,
         mons,
         mons,
-        tol;
+        tols;
         logging=logging
     )
 end
@@ -224,7 +239,7 @@ function symmetries_fixing_parameters_graded!(
     scalings::ScalingGroup,
     mons::MonomialVector,
     classes::Dict{Vector{Int}, Vector{Int}};
-    tol::Real=1e-5,
+    tols::Tolerances=Tolerances(1e-5),
     logging::Bool=false
 )
     
@@ -248,9 +263,9 @@ function symmetries_fixing_parameters_graded!(
                 g = gcd(vcat(num_mons, denom_mons))
                 if isone(g) && !only_param_dep(vcat(num_mons, denom_mons), n_unknowns)
                     if isnothing(eval_num_mons)
-                        eval_num_mons = evaluate_monomials_at_samples_(num_mons, F.samples)
+                        eval_num_mons = evaluate(num_mons, F.samples)
                     end
-                    eval_denom_mons = evaluate_monomials_at_samples_(denom_mons, F.samples)
+                    eval_denom_mons = evaluate(denom_mons, F.samples)
                     for (j, symmetry) in enumerate(symmetries)
                         if ismissing(symmetry[i])
                             symmetry[i] = _interpolate_symmetry_function(
@@ -260,7 +275,7 @@ function symmetries_fixing_parameters_graded!(
                                 eval_denom_mons,
                                 num_mons,
                                 denom_mons,
-                                tol;
+                                tols;
                                 logging=logging
                             )
                             if !ismissing(symmetry[i])
@@ -293,7 +308,7 @@ function symmetries_fixing_parameters_graded!(
     F::SampledSystem,
     scalings::ScalingGroup;
     degree_bound::Integer=1,
-    tol::Real=1e-5,
+    tols::Tolerances=Tolerances(1e-5),
     logging::Bool=false
 )
 
@@ -304,7 +319,7 @@ function symmetries_fixing_parameters_graded!(
         scalings,
         mons,
         classes;
-        tol=tol,
+        tols=tols,
         logging=logging
     )
 end
@@ -313,7 +328,7 @@ function symmetries_fixing_parameters_dense!(
     F::SampledSystem; 
     degree_bound::Integer=1,
     param_dep::Bool=true,
-    tol::Real=1e-5,
+    tols::Tolerances=Tolerances(1e-5),
     logging::Bool=false
 )
 
@@ -341,7 +356,7 @@ function symmetries_fixing_parameters_dense!(
                         view(F.samples.solutions, j, :, :),
                         evaluated_mons,
                         mons,
-                        tol;
+                        tols;
                         logging=logging
                     )
                     if !ismissing(symmetry[j])
@@ -371,7 +386,11 @@ end
 to_CC(scaling::Tuple{Int, Vector{Int}}) = [cis(2*pi*k/scaling[1]) for k in scaling[2]]
 
 # verify for all of the solutions in 1 instance
-function _all_deck_commute(F::SampledSystem, scaling::Tuple{Int, Vector{Int}}; tol::Real=1e-5)::Bool
+function _all_deck_commute(
+    F::SampledSystem,
+    scaling::Tuple{Int, Vector{Int}};
+    tol::Real=1e-5
+)
     instance_id = rand(1:size(F.samples.solutions, 3))
     sols1 = F.samples.solutions[:, :, instance_id]
     params1 = F.samples.parameters[:, instance_id]
@@ -420,9 +439,9 @@ function symmetries_fixing_parameters!(
     F::SampledSystem;
     degree_bound::Integer=1,
     param_dep::Bool=true,
-    tol::Real=1e-5,
+    tols::Tolerances=Tolerances(1e-5),
     logging::Bool=false
-)::DeckTransformationGroup
+)
 
     if length(F.deck_permutations) == 1 # trivial group of symmetries
         return DeckTransformationGroup(F) # return the identity group
@@ -436,7 +455,7 @@ function symmetries_fixing_parameters!(
             F;
             degree_bound=degree_bound,
             param_dep=param_dep,
-            tol=tol,
+            tols=tols,
             logging=logging
         )
     else
@@ -445,34 +464,14 @@ function symmetries_fixing_parameters!(
             F,
             scalings;
             degree_bound=degree_bound,
-            tol=tol,
+            tols=tols,
             logging=logging
         )
     end
 end
 
-function symmetries_fixing_parameters(  # TODO: extend to take a rational map
-    F::System,
-    (x₀, p₀)::Tuple{Vector{CC}, Vector{CC}};  # TODO: make optional arg?
-    degree_bound::Integer=1,
-    param_dep::Bool=true,
-    tol::Real=1e-5,
-    monodromy_options::Tuple=(),
-    logging::Bool=false
-)::DeckTransformationGroup
-
-    F = run_monodromy(F, (x₀, p₀); monodromy_options...)
-    return symmetries_fixing_parameters!(
-        F;
-        degree_bound=degree_bound,
-        param_dep=param_dep,
-        tol=tol,
-        logging=logging
-    )
-end
-
 """
-    symmetries_fixing_parameters(F::System; degree_bound=1, param_dep=true, tol=1e-5)
+    symmetries_fixing_parameters(F::System; degree_bound=1, param_dep=true)
 
 Given a polynomial system F returns the group of symmetries 
 of the polynomial system `F` that fix the parameters. The keyword
@@ -503,21 +502,22 @@ DeckTransformationGroup of order 4
    x₂ ↦ (0.0 + 1.0*im)*x₁
 ```
 """
-function symmetries_fixing_parameters(  # TODO: extend to take a rational map
+function symmetries_fixing_parameters(  # TODO: extend to take an expression map
     F::System;
+    xp₀::Union{Nothing, NTuple{2, AbstractVector{<:Number}}}=nothing,
     degree_bound::Integer=1,
     param_dep::Bool=true,
-    tol::Real=1e-5,
+    tols::Tolerances=Tolerances(1e-5),
     monodromy_options::Tuple=(),
     logging::Bool=false
-)::DeckTransformationGroup
+)
 
-    F = run_monodromy(F; monodromy_options...)
+    F = run_monodromy(F, xp₀; monodromy_options...)
     return symmetries_fixing_parameters!(
         F;
         degree_bound=degree_bound,
         param_dep=param_dep,
-        tol=tol,
+        tols=tols,
         logging=logging
     )
 end

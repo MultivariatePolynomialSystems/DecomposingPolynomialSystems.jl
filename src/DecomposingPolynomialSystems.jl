@@ -5,12 +5,14 @@ using HomotopyContinuation:
     @var,
     System,
     Variable,
-    Expression
-export @var, System, Variable, Expression
+    Expression,
+    degree,
+    evaluate
+export @var, System, Variable, Expression, degree
 const HC = HomotopyContinuation
 
 import LinearAlgebra
-export det, dot, I, nullspace
+export det, dot, I, nullspace, norm
 
 import GAP
 

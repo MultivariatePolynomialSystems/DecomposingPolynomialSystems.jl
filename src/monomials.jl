@@ -1,6 +1,5 @@
 export Monomial,
     MonomialVector,
-    monomials,
     to_expressions,
     to_classes,
     only_param_dep
@@ -8,50 +7,59 @@ export Monomial,
 # TODO: remove?
 # TODO: extend Number or nothing at all?
 struct Monomial{T<:Integer} #<: Number
-    vars::Vector{Variable}
     md::Vector{T}
+    vars::Vector{Variable}
 
-    function Monomial{T}(vars, md) where {T<:Integer}
+    function Monomial{T}(md, vars) where {T<:Integer}
         # TODO: check if lengths are equal, if mds contains numbers >= 0
-        return new(vars, md)
+        return new(md, vars)
     end
 end
 
-Monomial(vars::Vector{Variable}, md::Vector{T}) where {T<:Integer} = Monomial{T}(vars, md)
+Monomial(md::Vector{T}, vars::Vector{Variable}) where {T<:Integer} = Monomial{T}(md, vars)
+function Monomial{T}(var::Variable, vars::Vector{Variable}) where {T<:Integer}
+    md = zeros(T, length(vars))
+    md[findfirst(x->x==var, vars)] = 1
+    return Monomial{T}(md, vars)
+end
 Base.isone(mon::Monomial) = iszero(mon.md)
 Base.convert(::Type{Expression}, mon::Monomial) = prod(mon.vars.^mon.md)
+Base.:(==)(m₁::Monomial, m₂::Monomial) = Expression(m₁) == Expression(m₂)
 Base.show(io::IO, mon::Monomial) = show(io, Expression(mon))
 
 mutable struct MonomialVector{T<:Integer} # <: AbstractVector{Expression}
-    vars::Vector{Variable}
     mds::Vector{Vector{T}}
+    vars::Vector{Variable}
 
-    function MonomialVector{T}(vars, mds) where {T<:Integer}
+    function MonomialVector{T}(mds, vars) where {T<:Integer}
         # TODO: check if lengths are equal, if mds contains numbers >= 0
-        return new(vars, mds)
+        return new(mds, vars)
     end
 end
 
 MonomialVector(
-    vars::Vector{Variable},
-    mds::Vector{Vector{T}}
-) where {T<:Integer} = MonomialVector{T}(vars, mds)
+    mds::Vector{Vector{T}},
+    vars::Vector{Variable}
+) where {T<:Integer} = MonomialVector{T}(mds, vars)
 
 Base.length(mons::MonomialVector) = length(mons.mds)
-Base.getindex(mons::MonomialVector, i::Integer) = Monomial(mons.vars, mons.mds[i])
+Base.getindex(mons::MonomialVector, i::Integer) = Monomial(mons.mds[i], mons.vars)
 Base.getindex(
     mons::MonomialVector,
     inds...
-) = MonomialVector(mons.vars, getindex(mons.mds, inds...))
+) = MonomialVector(getindex(mons.mds, inds...), mons.vars)
+Base.findfirst(f::Function, mons::MonomialVector) = findfirst(f, mons.mds)
+Base.findfirst(m::Monomial, mons::MonomialVector) = findfirst(x->x==m.md, mons.mds)
 
 function Base.vcat(monVs::MonomialVector...)
     # TODO: check if mons.vars are all equal
-    MonomialVector(monVs[1].vars, vcat([mons.mds for mons in monVs]...))
+    MonomialVector(vcat([mons.mds for mons in monVs]...), monVs[1].vars)
 end
 
 # TODO
 function Base.show(io::IO, mons::MonomialVector)
-    print(io, "$(typeof(mons)) of length $(length(mons.mds))")
+    println(io, "$(length(mons.mds))-element $(typeof(mons))")
+    print(io, "[", join(to_expressions(mons), ", "), "]")
 end
 
 function multidegrees_homogeneous(md::Vector{T}, n::Integer, d::T) where {T<:Integer}
@@ -75,9 +83,9 @@ function MonomialVector{T}(
 
     d = convert(T, d)
     if homogeneous
-        return MonomialVector(vars, multidegrees_homogeneous(length(vars), d))
+        return MonomialVector(multidegrees_homogeneous(length(vars), d), vars)
     end
-    return MonomialVector(vars, multidegrees_affine(length(vars), d))
+    return MonomialVector(multidegrees_affine(length(vars), d), vars)
 end
 
 function to_expressions(mons::MonomialVector)
@@ -86,7 +94,7 @@ function to_expressions(mons::MonomialVector)
 end
 
 function Base.gcd(mons::MonomialVector)
-    return Monomial(mons.vars, vec(minimum(hcat(mons.mds...); dims=2)))
+    return Monomial(vec(minimum(hcat(mons.mds...); dims=2)), mons.vars)
 end
 
 # Methods below suppose that vars = [unknowns, parameters]
