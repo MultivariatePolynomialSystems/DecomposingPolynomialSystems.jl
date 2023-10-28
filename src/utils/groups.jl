@@ -1,104 +1,106 @@
-export group_structure, permutations_to_group, group_to_permutations
+export group_structure, to_group, to_permutations
 
-# TODO: & -> &&, use eachcol
-function filter_permutations(perms::Matrix{Int})::Vector{Vector{Int}}
-    nsols = length(perms[:,1])
-    return filter!(x->!(0 in x) & (length(unique(x)) == nsols), [perms[:,i] for i in 1:size(perms, 2)])
+using GAP: GapObj, julia_to_gap, gap_to_julia, Globals
+Gl = Globals
+to_gap = julia_to_gap
+to_julia = gap_to_julia
+
+group_structure(G::GapObj) = String(Gl.StructureDescription(G))
+
+function group_structure(perms::Vector{Vector{Int}})
+    return to_julia(Gl.StructureDescription(to_group(perms)))
 end
 
-group_structure(G::GapObj) = GAP.Globals.StructureDescription(G)
-
-function group_structure(perms::Vector{Vector{Int}})::String
-    return GAP.gap_to_julia(GAP.Globals.StructureDescription(permutations_to_group(perms)))
-end
-
-function permutations_to_group(perms::Vector{Vector{Int}})::GapObj
+function to_group(perms::Vector{Vector{Int}})
     if length(perms) == 0
-        return GAP.evalstr( "Group(())" )
+        return GAP.evalstr( "Group(())" )  # TODO: raise error?
     end
-    Sym = GAP.Globals.SymmetricGroup(length(perms[1]))
-    gap_gens = [GAP.Globals.PermList(GAP.julia_to_gap(perm)) for perm in perms]
-    Gal = GAP.julia_to_gap(gap_gens)
-    return GAP.Globals.Subgroup(Sym,Gal)
+    Sym = Gl.SymmetricGroup(length(perms[1]))
+    gap_gens = [Gl.PermList(to_gap(perm)) for perm in perms]
+    Gal = to_gap(gap_gens)
+    return Gl.Subgroup(Sym,Gal)
 end
 
-function perm_to_list(perm_gap::GapObj, n::Int)::Vector{Int}
-    return [GAP.Globals.OnPoints(i, perm_gap) for i in 1:n]
+function perm_to_list(perm::GapObj, n::Int)
+    return [Int(Gl.OnPoints(i, perm)) for i in 1:n]
 end
 
-function group_to_permutations(G::GapObj)::Vector{Vector{Int}}
-    elems_gap = GAP.Globals.Elements(G)
-    n = GAP.Globals.LargestMovedPoint(GAP.Globals.Parent(G))
+function to_permutations(G::GapObj)
+    elems_gap = Gl.Elements(G)
+    n = Gl.LargestMovedPoint(Gl.Parent(G))
     return [perm_to_list(elem, n) for elem in elems_gap]
 end
 
-function centralizer(G::GapObj)::GapObj
-    return GAP.Globals.Centralizer(GAP.Globals.Parent(G), G)
-end
+centralizer(G::GapObj) = Gl.Centralizer(Gl.Parent(G), G)
 
-function centralizer(perms::Vector{Vector{Int}})::GapObj
+function centralizer(perms::Vector{Vector{Int}})
     if length(perms) == 0
         return GAP.evalstr( "Group(())" )
     end
-    Sym = GAP.Globals.SymmetricGroup(length(perms[1]))
-    cents=[]
-    for i in eachindex(perms)
-        push!(cents, GAP.Globals.Centralizer(Sym, GAP.Globals.PermList(GAP.julia_to_gap(perms[i]))));
-    end
-    return GAP.Globals.Intersection(cents...)
+    Sym = Gl.SymmetricGroup(length(perms[1]))
+    cents = [Gl.Centralizer(Sym, Gl.PermList(to_gap(perms[i]))) for i in eachindex(perms)]
+    return Gl.Intersection(cents...)
 end
 
 function block_partition(G::GapObj)
-    n = GAP.Globals.LargestMovedPoint(G) # TODO
-    return Vector{Vector{Int}}(GAP.gap_to_julia(GAP.Globals.Blocks(G, GAP.julia_to_gap(Vector{Int}(1:n)))))
+    n = Gl.LargestMovedPoint(G)
+    return Vector{Vector{Int}}(to_julia(Gl.Blocks(G, to_gap(Vector(1:n)))))
 end
 
-function all_block_partitions(G::GapObj)::Vector{Vector{Vector{Int}}}
-    all_blocks = GAP.gap_to_julia(Vector{Vector{Int}}, GAP.Globals.AllBlocks(G))
-    n = GAP.Globals.LargestMovedPoint(G) # TODO
-    block_partitions = []
+function all_block_partitions(G::GapObj)
+    all_blocks = to_julia(Vector{Vector{Int}}, Gl.AllBlocks(G))
+    n = Gl.LargestMovedPoint(G)
+    block_partitions = Vector{Vector{Vector{Int}}}([])
     for block in all_blocks
-        block_partition = GAP.Globals.Blocks(G, GAP.julia_to_gap(Vector{Int}(1:n)), GAP.julia_to_gap(block))
-        push!(block_partitions, GAP.gap_to_julia(Vector{Vector{Int}}, block_partition))
+        block_partition = Gl.Blocks(G, to_gap(Vector{Int}(1:n)), to_gap(block))
+        push!(block_partitions, to_julia(Vector{Vector{Int}}, block_partition))
     end
-    return Vector{Vector{Vector{Int}}}(block_partitions)
+    return block_partitions
 end
 
-function action_on_blocks(G::GapObj, block_partition::Vector{Vector{Int}})::GapObj
-    blocks_gap = GAP.julia_to_gap([GAP.julia_to_gap(block) for block in block_partition])
-    return GAP.Globals.Action(G, blocks_gap, GAP.Globals.OnSets)
+function action_on_blocks(G::GapObj, block_partition::Vector{Vector{Int}})
+    blocks_gap = to_gap([to_gap(block) for block in block_partition])
+    return Gl.Action(G, blocks_gap, Gl.OnSets)
 end
 
-function action_on_block(G::GapObj, block_partition::Vector{Vector{Int}}, block_id::Int)::GapObj
+function action_on_block(
+    G::GapObj,
+    block_partition::Vector{Vector{Int}},
+    block_id::Int
+)
     n_blocks = length(block_partition)
     B = block_partition[block_id]
     block_size = length(B)
     elems = Set(vcat(block_partition...))
     remaining = collect(setdiff(elems, Set(B)))
-    new_blocks = GAP.julia_to_gap([GAP.julia_to_gap(sort(vcat([B[j]], remaining))) for j in 1:block_size])
-    S = GAP.Globals.Stabilizer(G, GAP.julia_to_gap(B), GAP.Globals.OnSets)
-    return GAP.Globals.Action(S, new_blocks, GAP.Globals.OnSets)
+    new_blocks = to_gap([to_gap(sort(vcat([B[j]], remaining))) for j in 1:block_size])
+    S = Gl.Stabilizer(G, to_gap(B), Gl.OnSets)
+    return Gl.Action(S, new_blocks, Gl.OnSets)
 end
 
-function action_on_given_blocks(G::GapObj, block_partition::Vector{Vector{Int}}, block_ids::Vector{Int})::GapObj
+function action_on_given_blocks(
+    G::GapObj,
+    block_partition::Vector{Vector{Int}},
+    block_ids::Vector{Int}
+)
     Bs = sort(vcat(block_partition[block_ids]...))
     set_size = length(Bs)
     elems = Set(vcat(block_partition...))
     remaining = collect(setdiff(elems, Set(Bs)))
-    new_blocks = GAP.julia_to_gap([GAP.julia_to_gap(sort(vcat([Bs[j]], remaining))) for j in 1:set_size])
-    S = GAP.Globals.Stabilizer(G, GAP.julia_to_gap(Bs), GAP.Globals.OnSets)
-    return GAP.Globals.Action(S, new_blocks, GAP.Globals.OnSets)
+    new_blocks = to_gap([to_gap(sort(vcat([Bs[j]], remaining))) for j in 1:set_size])
+    S = Gl.Stabilizer(G, to_gap(Bs), Gl.OnSets)
+    return Gl.Action(S, new_blocks, Gl.OnSets)
 end
 
 # Intersection of all block stabilizers
-function kernel_of_action_on_blocks(G::GapObj, block_partition::Vector{Vector{Int}})::GapObj
+function kernel_of_action_on_blocks(G::GapObj, block_partition::Vector{Vector{Int}})
     B1 = block_partition[1]
-    K = GAP.Globals.Stabilizer(G, GAP.julia_to_gap(B1), GAP.Globals.OnSets)
+    K = Gl.Stabilizer(G, to_gap(B1), Gl.OnSets)
     n_blocks = length(block_partition)
     for i = 2:n_blocks
         Bi = block_partition[i]
-        Si = GAP.Globals.Stabilizer(G, GAP.julia_to_gap(Bi), GAP.Globals.OnSets)
-        K = GAP.Globals.Intersection(K, Si)
+        Si = Gl.Stabilizer(G, to_gap(Bi), Gl.OnSets)
+        K = Gl.Intersection(K, Si)
         println("i = ", i)
     end
     return K

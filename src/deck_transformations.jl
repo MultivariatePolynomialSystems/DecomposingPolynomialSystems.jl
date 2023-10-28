@@ -45,7 +45,7 @@ end
 
 struct DeckTransformationGroup
     maps::Vector{DeckTransformation}
-    structure::String  # TODO: make it GapObj?
+    group::GapObj
     F::SampledSystem
 end
 
@@ -59,12 +59,12 @@ function DeckTransformationGroup(
     F::SampledSystem
 )
     action = [DeckTransformation(symmetry, unknowns(F), parameters(F)) for symmetry in symmetries]
-    return DeckTransformationGroup(action, group_structure(F.deck_permutations), F)
+    return DeckTransformationGroup(action, to_group(F.deck_permutations), F)
 end
 
 function Base.show(io::IO, deck::DeckTransformationGroup)
     println(io, "DeckTransformationGroup of order $(length(deck.maps))")
-    println(io, " structure: ", deck.structure)
+    println(io, " structure: ", group_structure(deck.group))
     print(io, " action:")
     for i in eachindex(deck.maps)
         println(io, "\n  ", to_ordinal(i), " map:")
@@ -263,9 +263,9 @@ function symmetries_fixing_parameters_graded!(
                 g = gcd(vcat(num_mons, denom_mons))
                 if isone(g) && !only_param_dep(vcat(num_mons, denom_mons), n_unknowns)
                     if isnothing(eval_num_mons)
-                        eval_num_mons = evaluate(num_mons, F.samples)
+                        eval_num_mons = HC.evaluate(num_mons, F.samples)
                     end
-                    eval_denom_mons = evaluate(denom_mons, F.samples)
+                    eval_denom_mons = HC.evaluate(denom_mons, F.samples)
                     for (j, symmetry) in enumerate(symmetries)
                         if ismissing(symmetry[i])
                             symmetry[i] = _interpolate_symmetry_function(
@@ -345,7 +345,7 @@ function symmetries_fixing_parameters_dense!(
         sample_system!(F, n_instances)
 
         logging && println("Evaluating monomials...\n")
-        evaluated_mons = evaluate_monomials_at_samples_(mons, F.samples)
+        evaluated_mons = HC.evaluate(mons, F.samples)
         
         for (i, symmetry) in enumerate(symmetries)
             logging && printstyled("Interpolating the ", i, "-th symmetry map...\n"; color=:blue)

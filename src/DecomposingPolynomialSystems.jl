@@ -1,20 +1,11 @@
 module DecomposingPolynomialSystems
 
-using HomotopyContinuation:
-    HomotopyContinuation,
-    @var,
-    System,
-    Variable,
-    Expression,
-    degree,
-    evaluate
-export @var, System, Variable, Expression, degree
+import HomotopyContinuation
 const HC = HomotopyContinuation
+using HomotopyContinuation.ModelKit
+export @var, Variable, Expression, System
 
-import LinearAlgebra
-export det, dot, I, nullspace, norm
-
-import GAP
+using LinearAlgebra: nullspace
 
 include("utils.jl")
 include("monomials.jl")

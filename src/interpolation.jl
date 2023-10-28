@@ -2,6 +2,8 @@ export gcd_mds, mds2mons, only_param_dep
 export partition_multidegrees
 export interpolate_vanishing_polynomials
 
+using LinearAlgebra: norm, dot
+
 function check_func_type(func_type::String)
     if (func_type != "polynomial" && func_type != "rational")
         error("func_type argument must be either \"polynomial\" or \"rational\"")

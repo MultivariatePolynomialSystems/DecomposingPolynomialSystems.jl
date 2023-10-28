@@ -9,11 +9,7 @@ export SampledSystem,
     n_parameters,
     n_variables
 
-using HomotopyContinuation:
-    MonodromyResult,
-    Result,
-    monodromy_solve,
-    solutions
+using HomotopyContinuation: Result, MonodromyResult
 
 # TODO: think about other ways to represent samples
 # TODO: make it parametric with T <: Number?
@@ -37,6 +33,14 @@ mutable struct SampledSystem
     deck_permutations::Vector{Vector{Int}}
 end
 
+function filter_permutations(perms::Matrix{Int})::Vector{Vector{Int}}
+    nsols = length(perms[:,1])
+    return filter(
+        x->!(0 in x) && (length(unique(x)) == nsols),
+        eachcol(perms)
+    )
+end
+
 # TODO: Do we need this constructor?
 SampledSystem() = SampledSystem(
     System([]),
@@ -46,26 +50,24 @@ SampledSystem() = SampledSystem(
 )
 
 function SampledSystem(F::System, MR::MonodromyResult)
-    sols, p₀ = HomotopyContinuation.solutions(MR), MR.parameters
-    
-    solsM = hcat(sols...)
-    solutions, parameters = reshape(solsM, size(solsM)..., 1), reshape(p₀, length(p₀), 1)
+    sols = hcat(HC.solutions(MR)...)
+    sols, params = reshape(sols, size(sols)..., 1), reshape(MR.parameters, :, 1)
 
     # TODO: throw warning? Error?
-    if length(sols) == 1
+    if size(sols, 2) == 1
         return SampledSystem(F,
-            VarietySamples(solutions, parameters),
+            VarietySamples(sols, params),
             [], [], []
         )
     end
 
-    monodromy_permutations = filter_permutations(HomotopyContinuation.permutations(MR))
-    block_partitions = all_block_partitions(permutations_to_group(monodromy_permutations))
-    deck_permutations = group_to_permutations(centralizer(monodromy_permutations))
+    monodromy_permutations = filter_permutations(HC.permutations(MR))
+    block_partitions = all_block_partitions(to_group(monodromy_permutations))
+    deck_permutations = to_permutations(centralizer(monodromy_permutations))
 
     return SampledSystem(
         F,
-        VarietySamples(solutions, parameters),
+        VarietySamples(sols, params),
         monodromy_permutations,
         block_partitions,
         deck_permutations
@@ -86,9 +88,11 @@ function Base.show(io::IO, F::SampledSystem)
     print(io, " number of deck permutations: $(length(F.deck_permutations))")
 end
 
-unknowns(F::SampledSystem) = F.system.variables
-parameters(F::SampledSystem) = F.system.parameters
-variables(F::SampledSystem) = vcat(unknowns(F), parameters(F))
+unknowns(F::System) = HC.variables(F)
+unknowns(F::SampledSystem) = unknowns(F.system)
+HC.parameters(F::SampledSystem) = parameters(F.system)
+variables(F::System) = vcat(unknowns(F), parameters(F))
+variables(F::SampledSystem) = variables(F.system)
 
 # TODO: remove underscore?
 n_unknowns(F::SampledSystem) = length(unknowns(F))
@@ -97,16 +101,16 @@ n_variables(F::SampledSystem) = length(variables(F))
 
 function run_monodromy(
     F::System,
-    xp₀::Union{Nothing, Tuple{Vector{CC}, Vector{CC}}}=nothing;
+    xp₀::Union{Nothing, NTuple{2, AbstractVector{<:Number}}}=nothing;
     options...
 )
     if isnothing(xp₀)
-        MR = monodromy_solve(F; permutations=true, options...)
+        MR = HC.monodromy_solve(F; permutations=true, options...)
     else
         x₀, p₀ = xp₀
-        MR = monodromy_solve(F, [x₀], p₀; permutations=true, options...)
+        MR = HC.monodromy_solve(F, [x₀], p₀; permutations=true, options...)
     end
-    if length(solutions(MR)) == 1
+    if length(HC.solutions(MR)) == 1
         error("Only 1 solution found, no monodromy group available. Try running again...")
     end
     return SampledSystem(F, MR)
@@ -126,16 +130,16 @@ function extract_samples(data_points::Vector{Tuple{Result, Vector{CC}}}, F::Samp
     all_sols = zeros(CC, n_unknowns, n_sols, n_instances)
     all_params = zeros(CC, n_params, n_instances)
     for i in 1:n_instances
-        sols = HomotopyContinuation.solutions(data_points[i][1])
+        sols = HC.solutions(data_points[i][1])
         params = data_points[i][2]
         while length(sols) != n_sols
             # println("Tracking solutions again...")
-            res = HomotopyContinuation.solve(F.system,
+            res = HC.solve(F.system,
                 sols0,
                 start_parameters = p0,
                 target_parameters = [randn(CC, n_params)]
             )
-            sols = HomotopyContinuation.solutions(res[1][1])
+            sols = HC.solutions(res[1][1])
             params = res[1][2]
         end
         all_sols[:, :, i] = hcat(sols...)
@@ -144,11 +148,11 @@ function extract_samples(data_points::Vector{Tuple{Result, Vector{CC}}}, F::Samp
     return (all_sols, all_params)
 end
 
-function sample_system!(F::SampledSystem, target_params::Vector{CC})
+function sample_system!(F::SampledSystem, target_params::AbstractVector{<:Number})
     instance_id = rand(1:size(F.samples.solutions, 3))
     p0 = F.samples.parameters[:, instance_id]
     sols = M2VV(F.samples.solutions[:, :, instance_id])
-    data_points = HomotopyContinuation.solve(
+    data_points = HC.solve(
         F.system,
         sols,
         start_parameters = p0,
@@ -156,14 +160,14 @@ function sample_system!(F::SampledSystem, target_params::Vector{CC})
     )
     
     n_unknowns, n_sols, _ = size(F.samples.solutions)
-    solutions = zeros(CC, n_unknowns, n_sols, 1)
-    solutions[:, :, 1] = hcat(HomotopyContinuation.solutions(data_points[1][1])...) # TODO: what if n_sols is different?
+    sols = zeros(CC, n_unknowns, n_sols, 1)
+    sols[:, :, 1] = hcat(HC.solutions(data_points[1][1])...) # TODO: what if n_sols is different?
     n_params = size(F.samples.parameters, 1)
-    parameters = zeros(CC, n_params, 1)
-    parameters[:, 1] = data_points[1][2]
+    params = zeros(CC, n_params, 1)
+    params[:, 1] = data_points[1][2]
     
-    all_sols = cat(F.samples.solutions, solutions, dims=3)
-    all_params = cat(F.samples.parameters, parameters, dims=2)
+    all_sols = cat(F.samples.solutions, sols, dims=3)
+    all_params = cat(F.samples.parameters, params, dims=2)
 
     F.samples = VarietySamples(all_sols, all_params)
 end
@@ -177,7 +181,7 @@ function sample_system!(F::SampledSystem, n_instances::Int)
         target_params = [randn(CC, length(p0)) for _ in 1:(n_instances-n_computed_instances)]
 
         # println("Solving ", n_instances-n_computed_instances, " instances by homotopy continutation...")
-        data_points = HomotopyContinuation.solve(
+        data_points = HC.solve(
             F.system,
             sols,
             start_parameters = p0,

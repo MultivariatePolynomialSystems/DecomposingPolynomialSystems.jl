@@ -1,8 +1,8 @@
 export ScalingGroup,
     scaling_symmetries
 
-using HomotopyContinuation: exponents_coefficients
 using AbstractAlgebra: matrix, snf_with_transform, ZZ, hnf, GF, lift
+using LinearAlgebra: diag
 
 Grading = Vector{Tuple{Int, Matrix{Int}}}  # TODO: make it struct?
 
