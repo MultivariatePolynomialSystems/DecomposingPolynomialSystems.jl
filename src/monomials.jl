@@ -97,11 +97,13 @@ function Base.gcd(mons::MonomialVector)
     return Monomial(vec(minimum(hcat(mons.mds...); dims=2)), mons.vars)
 end
 
-# Methods below suppose that vars = [unknowns, parameters]
-only_param_dep(md::Vector{<:Integer}, n_unknowns::Integer) = iszero(md[1:n_unknowns])
-only_param_dep(mon::Monomial, n_unknowns::Integer) = only_param_dep(mon.md, n_unknowns)
+only_param_dep(md::Vector{<:Integer}, unknowns_ids::Vector{Int}) = iszero(md[unknowns_ids])
+only_param_dep(mon::Monomial, unknowns_ids::Vector{Int}) = only_param_dep(mon.md, unknowns_ids)
 only_param_dep(
     mds::Vector{Vector{T}},
-    n_unknowns::Integer
-) where {T<:Integer} = all([only_param_dep(md, n_unknowns) for md in mds])
-only_param_dep(mons::MonomialVector, n_unknowns::Integer) = only_param_dep(mons.mds, n_unknowns)
+    unknowns_ids::Vector{Int}
+) where {T<:Integer} = all([only_param_dep(md, unknowns_ids) for md in mds])
+only_param_dep(
+    mons::MonomialVector,
+    unknowns_ids::Vector{Int}
+) = only_param_dep(mons.mds, unknowns_ids)

@@ -24,6 +24,7 @@ function Grading(s::Vector{Int}, U::Vector{Matrix{Int}})
     return grading
 end
 
+Base.isempty(grading::Grading) = isnothing(grading.free_part) && isempty(grading.mod_part)
 Base.copy(grading::Grading) = Grading(grading.free_part, grading.mod_part)
 
 function _structure(grading::Grading)
@@ -162,10 +163,10 @@ function _hnf_reduce(grading::Grading)
 end
 
 """
-    scaling_symmetries(F::System; in_hnf::Bool=true)
+    scaling_symmetries(F::System; in_hnf=true)
 
 Given a polynomial system `F` returns the group of scaling symmetries 
-of the polynomial system `F`.
+of `F`.
 
 ```julia-repl
 julia> @var x y z a b;
@@ -209,6 +210,7 @@ function reduce(grading::Grading)
         Uᵢ = filter_rows(!iszero, Uᵢ)
         size(Uᵢ, 1) != 0 && push!(red_grading.mod_part, (sᵢ, Uᵢ))
     end
+    return red_grading
 end
 
 function restrict_scalings(scalings::ScalingGroup, var_ids::Vector{Int})

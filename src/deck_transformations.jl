@@ -15,6 +15,8 @@ end
 
 Tolerances(tol::Real) = Tolerances(rref_tol=tol, sparsify_tol=tol)
 
+MiExpression = Union{Missing, Expression}
+
 struct DeckTransformation
     exprs::Vector{MiExpression}
     unknowns::Vector{Variable}
@@ -75,22 +77,18 @@ end
 
 Base.getindex(deck::DeckTransformationGroup, inds...) = getindex(deck.maps, inds...)
 
-function _num_deg2denom_deg(num_deg::Vector{Int}, grading::Grading, var_id::Int)
-    denom_deg = zeros(eltype(num_deg), length(num_deg))
-    k = 1
-    for (sᵢ, Uᵢ) in grading
+function _denom_deg(num_deg::Vector{Int}, grading::Grading, var_id::Int)
+    denom_deg = zeros(Int, length(num_deg))
+    U₀ = grading.free_part
+    if !isnothing(U₀)
+        k = size(U₀, 1)
+        denom_deg[1:k] = num_deg[1:k] - U₀[:, var_id]
+    end
+    for (sᵢ, Uᵢ) in grading.mod_part
         n_scalings = size(Uᵢ, 1)
-        denom_deg[k:k+n_scalings-1] = mod(num_deg[k:k+n_scalings-1] - Uᵢ[:, var_id], sᵢ)
+        denom_deg[k+1:k+n_scalings] = mod(num_deg[k:k+n_scalings-1] - Uᵢ[:, var_id], sᵢ)
         k += n_scalings
     end
-    # U₀ = grading["infinite"]
-    # k = size(U₀, 1)
-    # denom_deg[1:k] = num_deg[1:k] - U₀[:, var_id]
-    # for (sᵢ, Uᵢ) in grading["finite"]
-    #     n_scalings = size(Uᵢ, 1)
-    #     denom_deg[k+1:k+n_scalings] = mod(num_deg[k+1:k+n_scalings] - Uᵢ[:, var_id], sᵢ)
-    #     k += n_scalings
-    # end
     return denom_deg
 end
 
@@ -261,12 +259,12 @@ function symmetries_fixing_parameters_graded!(
         num_mons = mons[num_ids]
         eval_num_mons = nothing
         for i in 1:n_unknowns
-            denom_deg = _num_deg2denom_deg(num_deg, scalings.grading, i)  # i-th variable
+            denom_deg = _denom_deg(num_deg, scalings.grading, i)  # i-th variable
             denom_ids = get(classes, denom_deg, nothing)
             if !isnothing(denom_ids)
                 denom_mons = mons[denom_ids]
                 g = gcd(vcat(num_mons, denom_mons))
-                if isone(g) && !only_param_dep(vcat(num_mons, denom_mons), n_unknowns)
+                if isone(g) && !only_param_dep(vcat(num_mons, denom_mons), Vector(1:n_unknowns))
                     if isnothing(eval_num_mons)
                         eval_num_mons = HC.evaluate(num_mons, F.samples)
                     end
@@ -418,23 +416,19 @@ function _all_deck_commute(
     return true
 end
 
-# TODO: consider every element from finite components => take every linear combination with coeffs from Z_si
 function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingGroup)
-    final_grading = Grading([])
-    for (sᵢ, Uᵢ) in scalings.grading
-        if sᵢ == 0
-            push!(final_grading, (sᵢ, Uᵢ))
-            continue
-        end
+    grading = scalings.grading
+    final_grading = Grading(grading.free_part, [])
+    for (sᵢ, Uᵢ) in grading.mod_part
         Vᵢ = Array{Int}(undef, 0, size(Uᵢ, 2))
-        # Uᵢ ↦ all linear combinations of rows of Uᵢ
+        # TODO: Uᵢ ↦ all linear combinations of rows of Uᵢ
         for j in axes(Uᵢ, 1)
             if _all_deck_commute(F, (sᵢ, Uᵢ[j, :]))
                 Vᵢ = [Vᵢ; hcat(Uᵢ[j, :]...)]
             end
         end
         if size(Vᵢ, 1) > 0
-            push!(final_grading, (sᵢ, Vᵢ))
+            push!(final_grading.mod_part, (sᵢ, Vᵢ))
         end
     end
     return ScalingGroup(reduce(final_grading), scalings.vars)
@@ -449,13 +443,14 @@ function symmetries_fixing_parameters!(
 )
 
     if length(F.deck_permutations) == 1 # trivial group of symmetries
-        return DeckTransformationGroup(F) # return the identity group
+        return DeckTransformationGroup(F)
     end
 
     # scalings = scaling_symmetries(F)
     scalings = _scalings_commuting_with_deck(F, scaling_symmetries(F))
-    scalings = param_dep ? scalings : restrict_scalings(scalings, unknowns(F))
-    if length(scalings.grading) == 0
+    scalings = param_dep ? scalings : restrict_scalings(scalings, unknowns(F))  # TODO: justify!
+    if isempty(scalings.grading)
+        logging && printstyled("Running dense version...\n", color=:green)
         return symmetries_fixing_parameters_dense!(
             F;
             degree_bound=degree_bound,
@@ -479,10 +474,12 @@ end
     symmetries_fixing_parameters(F::System; degree_bound=1, param_dep=true)
 
 Given a polynomial system F returns the group of symmetries 
-of the polynomial system `F` that fix the parameters. The keyword
+of `F` that fix the parameters. The keyword
 argument `degree_bound` is used to set the upper bound for the
 degrees of numerator and denominator polynomials in expressions
-for the symmetries.
+for the symmetries. The `param_dep` keyword argument specifies
+whether to consider functions of the symmetries to be dependent
+on the parameters of `F`.
 
 ```julia-repl
 julia> @var x[1:2] p[1:2];

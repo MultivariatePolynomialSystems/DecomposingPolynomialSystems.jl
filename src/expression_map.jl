@@ -1,11 +1,9 @@
 export ExpressionMap
 
-MiExpression = Union{Missing, Expression}
-
 struct ExpressionMap
     domain_vars::Vector{Variable}
     image_vars::Vector{Variable}
-    exprs::Vector{MiExpression}
+    exprs::Vector{Expression}
 
     function ExpressionMap(domain_vars, image_vars, funcs)
         # TODO: exclude empty vectors, repetitions in vars
@@ -14,7 +12,7 @@ struct ExpressionMap
 end
 
 # TODO: what if vars not in funcs? What if funcs has variables not present in vars?
-function ExpressionMap(vars::Vector{Variable}, exprs::Vector{MiExpression})
+function ExpressionMap(vars::Vector{Variable}, exprs::Vector{Expression})
     @assert length(vars) == length(exprs) "#vars ≂̸ #exprs, specify image variables"
     return ExpressionMap(vars, vars, exprs)
 end
