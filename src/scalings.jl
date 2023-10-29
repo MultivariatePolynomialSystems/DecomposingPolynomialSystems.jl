@@ -34,10 +34,11 @@ function _structure(grading::Grading)
         free_str = n_free == 1 ? "ℤ" : "ℤ$(superscript(n_free))"
         str = str * free_str
     end
-    for (sᵢ, Uᵢ) in grading.mod_part
+    for (i, (sᵢ, Uᵢ)) in enumerate(grading.mod_part)
+        prod_str = isnothing(U₀) && i == 1 ? "" : " × "
         n_sᵢ = size(Uᵢ, 1)
-        sᵢ_str = n_sᵢ == 1 ? " × ℤ$(subscript(sᵢ))" : " × ℤ$(subscript(sᵢ))$(superscript(n_sᵢ))"
-        str = str * sᵢ_str
+        sᵢ_str = n_sᵢ == 1 ? "ℤ$(subscript(sᵢ))" : "ℤ$(subscript(sᵢ))$(superscript(n_sᵢ))"
+        str = str * prod_str * sᵢ_str
     end
     return str
 end
@@ -116,7 +117,7 @@ function Base.show(io::IO, scalings::ScalingGroup)
         end
     end
     if n_mod != 0
-        println(io, "\n")
+        n_free != 0 && println(io, "\n")
         println(io, " modular scalings:")
         for (sᵢ, sᵢ_actions) in scalings.action[2]
             print(io, "  $(length(sᵢ_actions)) of order $(sᵢ):")
