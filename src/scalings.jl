@@ -2,7 +2,7 @@ export Grading,
     ScalingGroup,
     scaling_symmetries
 
-using AbstractAlgebra: matrix, snf_with_transform, ZZ, hnf, GF, lift
+using AbstractAlgebra: matrix, snf_with_transform, ZZ, hnf, residue_ring, lift
 using LinearAlgebra: diag
 
 mutable struct Grading
@@ -119,7 +119,7 @@ function Base.show(io::IO, scalings::ScalingGroup)
     if n_mod != 0
         n_free != 0 && println(io, "\n")
         println(io, " modular scalings:")
-        for (sᵢ, sᵢ_actions) in scalings.action[2]
+        for (i, (sᵢ, sᵢ_actions)) in enumerate(scalings.action[2])
             print(io, "  $(length(sᵢ_actions)) of order $(sᵢ):")
             for mod_action in sᵢ_actions
                 print(io, "\n   ")
@@ -128,6 +128,7 @@ function Base.show(io::IO, scalings::ScalingGroup)
                     j < length(mod_action) && print(io, ", ")
                 end
             end
+            i < length(scalings.action[2]) && print(io, "\n")
         end
     end
 end
@@ -156,7 +157,7 @@ end
 function _hnf_reduce(grading::Grading)
     U₀ = grading.free_part
     hnf_U₀ = isnothing(U₀) ? nothing : Matrix(hnf(matrix(ZZ, U₀)))
-    hnf_Uᵢs = [(sᵢ, lift.(Matrix(hnf(matrix(GF(sᵢ), Uᵢ))))) for (sᵢ, Uᵢ) in grading.mod_part]
+    hnf_Uᵢs = [(sᵢ, lift.(Matrix(hnf(matrix(residue_ring(ZZ, sᵢ), Uᵢ))))) for (sᵢ, Uᵢ) in grading.mod_part]
     return Grading(hnf_U₀, hnf_Uᵢs)
 end
 
@@ -167,16 +168,21 @@ Given a polynomial system `F` returns the group of scaling symmetries
 of the polynomial system `F`.
 
 ```julia-repl
-julia> @var x[1:2] p[1:2];
+julia> @var x y z a b;
 
-julia> F = System([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; variables=x, parameters=p);
+julia> F = System([x^4 + y^2 + 1, z + a*b]);
 
-julia> scalings = scaling_symmetries(F)
-ScalingGroup with 2 scalings
- infinite scalings: 1
- finite scalings:
-  1 of order 2
- vars: x₁, x₂, p₁, p₂
+julia> scaling_symmetries(F)
+ScalingGroup isomorphic to ℤ² × ℤ₄ × ℤ₂
+ 2 free scalings:
+  a ↦ a*λ₁, z ↦ z*λ₁
+  b ↦ b*λ₂, z ↦ z*λ₂
+
+ modular scalings:
+  1 of order 4:
+   a ↦ a*ω₄, b ↦ b*ω₄^2, x ↦ x*ω₄^3, y ↦ y*ω₄^2, z ↦ z*ω₄^3
+  1 of order 2:
+   a ↦ -a, x ↦ -x, y ↦ -y, z ↦ -z
 ```
 """
 function scaling_symmetries(F::System; in_hnf::Bool=true)
