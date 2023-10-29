@@ -1,12 +1,12 @@
-export DeckTransformation,
+export Tolerances,
+    DeckTransformation,
     DeckTransformationGroup,
-    Tolerances,
     symmetries_fixing_parameters_dense!,
     symmetries_fixing_parameters_graded!,
     symmetries_fixing_parameters!,
     symmetries_fixing_parameters
 
-Base.@kwdef struct Tolerances
+@kwdef struct Tolerances
     nullspace_atol::Float64=0
     nullspace_rtol::Float64=0
     rref_tol::Float64
@@ -29,12 +29,10 @@ end
 Base.getindex(dt::DeckTransformation, inds...) = getindex(dt.exprs, inds...)
 
 function Base.show(io::IO, dt::DeckTransformation)
-    unkn_str = length(dt.unknowns) == 1 ? "unknown" : "unknowns"
-    param_str = length(dt.parameters) == 1 ? "parameter" : "parameters"
     println(
         io,
-        "DeckTransformation: acts on $(length(dt.unknowns)) $(unkn_str),",
-        " fixes $(length(dt.parameters)) $(param_str)",
+        "DeckTransformation: acts on $(phrase(length(dt.unknowns), "unknown")),",
+        " fixes $(phrase(length(dt.parameters), "parameter"))",
     )
     println(io, " action:")
     for i in 1:length(dt.exprs)
@@ -85,6 +83,14 @@ function _num_deg2denom_deg(num_deg::Vector{Int}, grading::Grading, var_id::Int)
         denom_deg[k:k+n_scalings-1] = mod(num_deg[k:k+n_scalings-1] - Uᵢ[:, var_id], sᵢ)
         k += n_scalings
     end
+    # U₀ = grading["infinite"]
+    # k = size(U₀, 1)
+    # denom_deg[1:k] = num_deg[1:k] - U₀[:, var_id]
+    # for (sᵢ, Uᵢ) in grading["finite"]
+    #     n_scalings = size(Uᵢ, 1)
+    #     denom_deg[k+1:k+n_scalings] = mod(num_deg[k+1:k+n_scalings] - Uᵢ[:, var_id], sᵢ)
+    #     k += n_scalings
+    # end
     return denom_deg
 end
 
@@ -92,7 +98,7 @@ end
 # TODO: Do we need printing? Then passing mons isn't necessary, just their number
 # TODO: change the name of the method?
 function _remove_zero_nums_and_denoms(
-    coeffs::AbstractMatrix{CC},
+    coeffs::AbstractMatrix{<:Number},
     num_mons::MonomialVector,
     denom_mons::MonomialVector;
     logging::Bool=false
@@ -114,11 +120,10 @@ function _remove_zero_nums_and_denoms(
 end
 
 function _remove_zero_nums_and_denoms(
-    coeffs::Matrix{<:Complex},
+    coeffs::AbstractMatrix{<:Number},
     mons::MonomialVector;
     logging::Bool=false
 )
-
     return _remove_zero_nums_and_denoms(coeffs, mons, mons, logging=logging)
 end
 

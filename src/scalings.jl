@@ -1,84 +1,140 @@
-export ScalingGroup,
+export Grading,
+    ScalingGroup,
     scaling_symmetries
 
 using AbstractAlgebra: matrix, snf_with_transform, ZZ, hnf, GF, lift
 using LinearAlgebra: diag
 
-Grading = Vector{Tuple{Int, Matrix{Int}}}  # TODO: make it struct?
+mutable struct Grading
+    free_part::Union{Nothing, Matrix{Int}}
+    mod_part::Vector{Tuple{Int, Matrix{Int}}}
+end
+
+Grading() = Grading(nothing, [])
+
+function Grading(s::Vector{Int}, U::Vector{Matrix{Int}})
+    grading = Grading()
+    for (sᵢ, Uᵢ) in zip(s, U)
+        if sᵢ == 0
+            grading.free_part = Uᵢ
+        else
+            push!(grading.mod_part, (sᵢ, Uᵢ))
+        end
+    end
+    return grading
+end
+
+Base.copy(grading::Grading) = Grading(grading.free_part, grading.mod_part)
+
+function _structure(grading::Grading)
+    str = ""
+    U₀ = grading.free_part
+    if !isnothing(U₀)
+        n_free = size(U₀, 1)
+        free_str = n_free == 1 ? "ℤ" : "ℤ$(superscript(n_free))"
+        str = str * free_str
+    end
+    for (sᵢ, Uᵢ) in grading.mod_part
+        n_sᵢ = size(Uᵢ, 1)
+        sᵢ_str = n_sᵢ == 1 ? " × ℤ$(subscript(sᵢ))" : " × ℤ$(subscript(sᵢ))$(superscript(n_sᵢ))"
+        str = str * sᵢ_str
+    end
+    return str
+end
+
+function Base.show(io::IO, grading::Grading)
+
+end
+
+SparseAction = Vector{Tuple{Variable, Expression}}
 
 struct ScalingGroup
     grading::Grading
+    structure::String
     vars::Vector{Variable}
-    action::Vector{Tuple{Int, Dict{Variable, Expression}}}
+    action::Tuple{Vector{SparseAction}, Vector{Tuple{Int, Vector{SparseAction}}}}
 end
 
-ScalingGroup() = ScalingGroup([], [], [])
+ScalingGroup(vars::Vector{Variable}) = ScalingGroup(Grading(), "N/A", vars, ([], []))
 
-# TODO: replace finite λ vars to multiplications by roots of unity?
 function ScalingGroup(grading::Grading, vars::Vector{Variable})
-    action = Vector{Tuple{Int, Dict{Variable, Expression}}}([])
-    k = 0
-    for (sᵢ, Uᵢ) in grading
-        n_scalings = size(Uᵢ, 1)
-        @var λ[(k+1):(n_scalings+k)]
-        for j in 1:n_scalings
-            nonzero_ids = findall(!iszero, Uᵢ[j, :])
-            vals = (λ[j].^Uᵢ[j, :][nonzero_ids]).*vars[nonzero_ids]
-            push!(action, (sᵢ, Dict(zip(vars[nonzero_ids], vals))))
+    free_action = Vector{SparseAction}([])
+    U₀ = grading.free_part
+    if !isnothing(U₀)
+        if size(U₀, 1) == 1
+            @var λ
+            λ = [λ]
+        else
+            @var λ[1:size(U₀, 1)]
         end
-        k += n_scalings
+        for j in axes(U₀, 1)
+            nonzero_ids = findall(!iszero, U₀[j, :])
+            exprs = (λ[j].^U₀[j, :][nonzero_ids]).*vars[nonzero_ids]
+            push!(free_action, collect(zip(vars[nonzero_ids], exprs)))
+        end
     end
-    return ScalingGroup(grading, vars, action)
+    mod_action = Vector{Tuple{Int, Vector{SparseAction}}}([])
+    for (sᵢ, Uᵢ) in grading.mod_part
+        sᵢ_action = Vector{SparseAction}([])
+        if sᵢ == 2
+            for j in axes(Uᵢ, 1)
+                nonzero_ids = findall(!iszero, Uᵢ[j, :])
+                push!(sᵢ_action, collect(zip(vars[nonzero_ids], -vars[nonzero_ids])))
+            end
+        else
+            @var ω[sᵢ]
+            for j in axes(Uᵢ, 1)
+                nonzero_ids = findall(!iszero, Uᵢ[j, :])
+                exprs = (ω[1].^Uᵢ[j, :][nonzero_ids]).*vars[nonzero_ids]
+                push!(sᵢ_action, collect(zip(vars[nonzero_ids], exprs)))
+            end
+        end
+        push!(mod_action, (sᵢ, sᵢ_action))
+    end
+    action = (free_action, mod_action)
+    return ScalingGroup(grading, _structure(grading), vars, action)
 end
 
-Base.copy(s::ScalingGroup) = ScalingGroup(s.grading, s.vars, s.action)
+Base.copy(s::ScalingGroup) = ScalingGroup(s.grading, s.structure, s.vars, s.action)
 
 function Base.show(io::IO, scalings::ScalingGroup)
-    n_infinite, n_finite = 0, 0
-    for (sᵢ, Uᵢ) in scalings.grading
-        if sᵢ == 0
-            n_infinite = size(Uᵢ, 1)
-        else
-            n_finite += size(Uᵢ, 1)
+    action = scalings.action
+    n_free, n_mod = length(action[1]), length(action[2])
+    if n_free + n_mod == 0
+        print(io, "ScalingGroup with 0 scalings")
+        return
+    end
+    println(io, "ScalingGroup isomorphic to $(scalings.structure)")
+    if n_free != 0
+        print(io, " $(phrase(n_free, "free scaling")):")
+        for free_action in scalings.action[1]
+            print(io, "\n  ")
+            for (j, (var, expr)) in enumerate(free_action)
+                print(io, var, " ↦ ", expr)
+                j < length(free_action) && print(io, ", ")
+            end
         end
     end
-    print(io, "ScalingGroup with $(n_infinite+n_finite) scaling")
-    n_infinite + n_finite == 1 ? print(io, "\n") : print(io, "s\n")
-    n_infinite + n_finite == 0 && return
-    if n_infinite != 0
-        print(io, " $(n_infinite) infinite scaling")
-        n_infinite == 1 ? print(io, ":") : print(io, "s:")
-        for (sᵢ, scaling) in scalings.action
-            if sᵢ == 0
-                print(io, "\n  ")
-                for (j, var) in enumerate(scalings.vars)
-                    if !isnothing(get(scaling, var, nothing))
-                        print(io, var, " ↦ ", scaling[var])
-                        j < length(scalings.vars) && print(io, ", ")
-                    end
+    if n_mod != 0
+        println(io, "\n")
+        println(io, " modular scalings:")
+        for (sᵢ, sᵢ_actions) in scalings.action[2]
+            print(io, "  $(length(sᵢ_actions)) of order $(sᵢ):")
+            for mod_action in sᵢ_actions
+                print(io, "\n   ")
+                for (j, (var, expr)) in enumerate(mod_action)
+                    print(io, var, " ↦ ", expr)
+                    j < length(mod_action) && print(io, ", ")
                 end
             end
         end
     end
-    if n_finite != 0
-        println(io, " finite scalings:")
-        for (i, (sᵢ, Uᵢ)) in enumerate(scalings.grading)
-            if sᵢ == 0 continue end
-            println(io, "  $(size(Uᵢ, 1)) of order $(sᵢ)")
-        end
-    end
-    # print(io, " vars: ", join(scalings.vars, ", "))
-end
-
-function _mat2col_diffs(M::AbstractMatrix{T}) where {T<:Number}
-    M = M - M[:,1]*ones(T, 1, size(M,2))
-    return M[:,2:end]
 end
 
 function _snf_scaling_symmetries(F::System)::Tuple{Vector{Int}, Vector{Matrix{Int}}}
     vars = vcat(F.variables, F.parameters)
     Es = [exponents_coefficients(f, vars)[1] for f in F.expressions]
-    K = hcat([_mat2col_diffs(E) for E in Es]...)
+    K = hcat([column_diffs(E) for E in Es]...)
     if size(K, 1) > size(K, 2)
         K = [K zeros(eltype(K), size(K, 1), size(K,1)-size(K,2))]
     end
@@ -93,17 +149,14 @@ function _snf_scaling_symmetries(F::System)::Tuple{Vector{Int}, Vector{Matrix{In
     end
     idxs = [findall(x->x==el, S) for el in s]
     Us = [U[idxs[i], :] for i in eachindex(idxs)]
-    return s, Us # TODO: what if max(Us[i]) > MAX_INT64?
+    return s, Us
 end
 
-function _hnf_reduce!(grading::Grading)
-    for (i, (sᵢ, Uᵢ)) in enumerate(grading)
-        if sᵢ == 0
-            grading[i] = (sᵢ, Matrix(hnf(matrix(ZZ, Uᵢ))))
-        else
-            grading[i] = (sᵢ, lift.(Matrix(hnf(matrix(GF(sᵢ), Uᵢ)))))
-        end
-    end
+function _hnf_reduce(grading::Grading)
+    U₀ = grading.free_part
+    hnf_U₀ = isnothing(U₀) ? nothing : Matrix(hnf(matrix(ZZ, U₀)))
+    hnf_Uᵢs = [(sᵢ, lift.(Matrix(hnf(matrix(GF(sᵢ), Uᵢ))))) for (sᵢ, Uᵢ) in grading.mod_part]
+    return Grading(hnf_U₀, hnf_Uᵢs)
 end
 
 """
@@ -126,13 +179,11 @@ ScalingGroup with 2 scalings
 ```
 """
 function scaling_symmetries(F::System; in_hnf::Bool=true)
-    s, U = _snf_scaling_symmetries(F)
-    if length(s) == 0
-        return ScalingGroup()
-    end
-    grading = collect(zip(s, U))
-    if in_hnf _hnf_reduce!(grading) end
     vars = vcat(F.variables, F.parameters)
+    s, U = _snf_scaling_symmetries(F)
+    length(s) == 0 && return ScalingGroup(vars)
+    grading = Grading(s, U)
+    in_hnf && return ScalingGroup(_hnf_reduce(grading), vars)
     return ScalingGroup(grading, vars)
 end
 
@@ -143,33 +194,33 @@ scaling_symmetries(
 
 # TODO: extend to remove rows dependent on other blocks
 function reduce(grading::Grading)
-    grading_cp = copy(grading)
-    _hnf_reduce!(grading_cp)
-    filtered_grading = Grading([])
-    for (i, (sᵢ, Uᵢ)) in enumerate(grading_cp)
-        Uᵢ = remove_zero_rows(Uᵢ)
-        if size(Uᵢ, 1) != 0
-            push!(filtered_grading, (sᵢ, Uᵢ))
-        end
+    hnf_grading = _hnf_reduce(grading)
+    red_grading = Grading()
+    U₀ = filter_rows(!iszero, hnf_grading.free_part)
+    red_grading.free_part = size(U₀, 1) == 0 ? nothing : U₀
+    for (sᵢ, Uᵢ) in hnf_grading.mod_part
+        Uᵢ = filter_rows(!iszero, Uᵢ)
+        size(Uᵢ, 1) != 0 && push!(red_grading.mod_part, (sᵢ, Uᵢ))
     end
-    return filtered_grading
 end
 
 function restrict_scalings(scalings::ScalingGroup, var_ids::Vector{Int})
     restr_grading = copy(scalings.grading)
-    for (i, (sᵢ, Uᵢ)) in enumerate(scalings.grading)
-        restr_grading[i] = (sᵢ, Uᵢ[:, var_ids])
+    U₀ = restr_grading.free_part
+    restr_grading.free_part = isnothing(U₀) ? nothing : U₀[:, var_ids]
+    for (sᵢ, Uᵢ) in restr_grading.mod_part
+        restr_grading.mod_part[i] = (sᵢ, Uᵢ[:, var_ids])
     end
     return ScalingGroup(reduce(restr_grading), scalings.vars[var_ids])
 end
 
 # TODO: what if vars is not a subset of scalings.vars?
 function restrict_scalings(scalings::ScalingGroup, vars::Vector{Variable})
-    ids = [findfirst(v->v==var, scalings.vars) for var in vars]
-    if nothing in ids 
+    var_ids = [findfirst(v->v==var, scalings.vars) for var in vars]
+    if nothing in var_ids
         throw(ArgumentError("vars contains variables not present in scalings.vars"))
     end
-    return restrict_scalings(scalings, ids)
+    return restrict_scalings(scalings, var_ids)
 end
 
 scaling_symmetries(
@@ -182,7 +233,9 @@ scaling_symmetries(
 ) = scaling_symmetries(F.system, vars)
 
 function HC.degree(md::Vector{<:Integer}, grading::Grading)
-    return vcat([mod(Uᵢ*md, sᵢ) for (sᵢ, Uᵢ) in grading]...)
+    U₀ = grading.free_part
+    deg_free = isnothing(U₀) ? Vector{Int}([]) : U₀*md
+    return vcat(deg_free, [mod(Uᵢ*md, sᵢ) for (sᵢ, Uᵢ) in grading.mod_part]...)
 end
 
 HC.degree(mon::Monomial, grading::Grading) = degree(mon.md, grading)

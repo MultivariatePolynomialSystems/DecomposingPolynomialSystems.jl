@@ -10,12 +10,6 @@ function Base.copyto!(M::AbstractMatrix{T}, v::AbstractVector{AbstractVector{T}}
     end
 end
 
-# V2M(V::AbstractVector) = reshape(V, :, 1)
-# V2Mt(V::AbstractVector) = hcat(V...)
-# VV2M(V::AbstractVector) = hcat(V...)
-# VM2M(V::AbstractVector) = hcat(V...)
-# VM2V(V::AbstractVector) = M2V(hcat(V...))
-
 xx(v) = [0 -v[3] v[2]; v[3] 0 -v[1]; -v[2] v[1] 0]
 xx2v(xx) = [-xx[2,3], xx[1,3], -xx[1,2]]
 eye(T, n::Integer) = Matrix{T}(I(n))
@@ -23,10 +17,7 @@ eye(T, n::Integer) = Matrix{T}(I(n))
 num_mons(n::Integer, d::Integer) = n > 0 ? binomial(n - 1 + d, d) : 0
 num_mons_upto(n::Integer, d::Integer) = n > 0 ? binomial(n + d, d) : 0
 
-function Base.mod(v::Vector{<:Number}, n::Number)
-    iszero(n) && return v
-    return [mod(vᵢ, n) for vᵢ in v]
-end
+Base.mod(v::Vector{<:Number}, n::Number) = [mod(vᵢ, n) for vᵢ in v]
 
 # TODO: test this
 function sparsify!(v::AbstractVector{<:Number}, tol::Real; digits::Integer=0)
@@ -66,7 +57,7 @@ function to_ordinal(n::Integer)::String
     return "$(n)th"
 end
 
-function subscriptnumber(n::Integer)::String
+function subscript(n::Integer)::String
     c = n < 0 ? [Char(0x208B)] : []
     for d in reverse(digits(abs(n)))
         push!(c, Char(0x2080+d))
@@ -74,7 +65,7 @@ function subscriptnumber(n::Integer)::String
     return join(c)
 end
 
-function superscriptnumber(n::Integer)::String
+function superscript(n::Integer)::String
     c = n < 0 ? [Char(0x207B)] : []
     for d in reverse(digits(abs(n)))
         if d == 0 push!(c, Char(0x2070)) end
@@ -101,13 +92,20 @@ function Base.filter(f::Function, M::AbstractMatrix, dim::Integer)
 end
 
 # TODO: extend Base.filter?
-function remove_zero_rows(M::AbstractMatrix{<:Number})
-    nonzero_rows = filter(!iszero, collect(eachrow(M)))
-    if length(nonzero_rows) == 0
-        return Matrix{eltype(M)}(undef, 0, size(M, 2))
+function filter_rows(f::Function, M::AbstractMatrix{T}) where {T}
+    filtered = filter(f, collect(eachrow(M)))
+    if length(filtered) == 0
+        return Matrix{T}(undef, 0, size(M, 2))
     end
-    return transpose(hcat(nonzero_rows...))
+    return transpose(hcat(filtered...))
 end
+
+function column_diffs(M::AbstractMatrix{T}) where {T<:Number}
+    M = M - M[:,1]*ones(T, 1, size(M,2))
+    return M[:,2:end]
+end
+
+phrase(i::Integer, word::String) = i == 1 ? "$(i) $(word)" : "$(i) $(word)s"
 
 # function exprDet(M; expnd=true)
 #     n = size(M, 1)

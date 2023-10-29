@@ -41,14 +41,6 @@ function filter_permutations(perms::Matrix{Int})::Vector{Vector{Int}}
     )
 end
 
-# TODO: Do we need this constructor?
-SampledSystem() = SampledSystem(
-    System([]),
-    VarietySamples(Array{CC}(undef, 0, 0, 0), Array{CC}(undef, 0, 0)),
-    Array{Int}(undef, 0, 0),
-    [], []
-)
-
 function SampledSystem(F::System, MR::MonodromyResult)
     sols = hcat(HC.solutions(MR)...)
     sols, params = reshape(sols, size(sols)..., 1), reshape(MR.parameters, :, 1)
@@ -77,15 +69,15 @@ end
 function Base.show(io::IO, F::SampledSystem)
     sols = F.samples.solutions
     n_samples = size(sols, 2)*size(sols, 3)
-    println(io, "SampledSystem with $(n_samples) samples")
-    print(io, " $(n_unknowns(F)) unknowns: ", join(unknowns(F), ", "))
+    println(io, "SampledSystem with $(phrase(n_samples, "sample"))")
+    print(io, " $(phrase(n_unknowns(F), "unknown")): ", join(unknowns(F), ", "))
     if !isempty(parameters(F))
-        print(io, "\n $(n_parameters(F)) parameters: ", join(parameters(F), ", "))
+        print(io, "\n $(phrase(n_parameters(F), "parameter")): ", join(parameters(F), ", "))
     end
     print(io, "\n\n")
-    println(io, " number of solutions: $(size(sols, 2))")
-    println(io, " number of sampled instances: $(size(sols, 3))")
-    print(io, " number of deck permutations: $(length(F.deck_permutations))")
+    println(io, " sampled instances: $(size(sols, 3))")
+    println(io, " solutions per instance: $(size(sols, 2))")
+    print(io, " deck permutations: $(length(F.deck_permutations))")
 end
 
 unknowns(F::System) = HC.variables(F)
