@@ -2,7 +2,7 @@ export Grading,
     ScalingGroup,
     scaling_symmetries
 
-using AbstractAlgebra: matrix, snf_with_transform, ZZ, hnf, residue_ring, lift
+using AbstractAlgebra: ZZ, matrix, residue_ring, lift, hnf, snf_with_transform 
 using LinearAlgebra: diag
 
 mutable struct Grading

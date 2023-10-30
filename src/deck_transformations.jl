@@ -4,7 +4,8 @@ export Tolerances,
     symmetries_fixing_parameters_dense!,
     symmetries_fixing_parameters_graded!,
     symmetries_fixing_parameters!,
-    symmetries_fixing_parameters
+    symmetries_fixing_parameters,
+    _deck_map
 
 @kwdef struct Tolerances
     nullspace_atol::Float64=0
@@ -125,14 +126,15 @@ function _remove_zero_nums_and_denoms(
     return _remove_zero_nums_and_denoms(coeffs, mons, mons, logging=logging)
 end
 
-function _vandermonde_matrix(
-    permutation::Vector{Int},
-    values::AbstractMatrix{T},
+function _deck_vandermonde_matrix(
+    deck_permutation::Vector{Int},
+    function_id::Int,
+    solutions::AbstractArray{T, 3},
     eval_num_mons::AbstractArray{T, 3},
     eval_denom_mons::AbstractArray{T, 3}
 ) where {T<:Complex}
 
-    n_sols, n_instances = size(values)
+    _, n_sols, n_instances = size(solutions)
     n_num_mons = size(eval_num_mons, 1)
     n_denom_mons = size(eval_denom_mons, 1)
 
@@ -140,7 +142,7 @@ function _vandermonde_matrix(
     @assert size(A, 1) >= size(A, 2)
 
     for i in 1:n_sols
-        v = values[permutation[i], :]
+        v = solutions[function_id, deck_permutation[i], :]
         rows = ((i-1)*n_instances+1):(i*n_instances)
         A[rows, 1:n_num_mons] = transpose(eval_num_mons[:, i, :])
         A[rows, (n_num_mons+1):end] = -transpose(eval_denom_mons[:, i, :]).*v
@@ -148,13 +150,14 @@ function _vandermonde_matrix(
     return A
 end
 
-function _vandermonde_matrix(
-    permutation::Vector{Int},
-    values::AbstractMatrix{T},
+function _deck_vandermonde_matrix(
+    deck_permutation::Vector{Int},
+    function_id::Int,
+    solutions::AbstractArray{T, 3},
     eval_mons::AbstractArray{T, 3}
 ) where {T<:Complex}
 
-    return _vandermonde_matrix(permutation, values, eval_mons, eval_mons)
+    return _deck_vandermonde_matrix(deck_permutation, function_id, solutions, eval_mons, eval_mons)
 end
 
 function _all_interpolated(symmetries::Vector{Vector{MiExpression}})
@@ -177,9 +180,10 @@ function _init_symmetries(n_symmetries::Int, unknowns::Vector{Variable})
     return symmetries
 end
 
-function _interpolate_symmetry_function(
-    permutation::Vector{Int},
-    values::AbstractMatrix{T},
+function _interpolate_deck_function(
+    deck_permutation::Vector{Int},
+    function_id::Int,
+    solutions::AbstractArray{T, 3},
     eval_num_mons::AbstractArray{T, 3},
     eval_denom_mons::AbstractArray{T, 3},
     num_mons::MonomialVector,
@@ -192,7 +196,13 @@ function _interpolate_symmetry_function(
         "Creating vandermonde matrix of size ",
         (prod(size(values)), length(num_mons)+length(denom_mons))
     )
-    A = _vandermonde_matrix(permutation, values, eval_num_mons, eval_denom_mons)
+    A = _deck_vandermonde_matrix(
+        deck_permutation,
+        function_id,
+        solutions,
+        eval_num_mons,
+        eval_denom_mons
+    )
 
     logging && println("Computing nullspace...")
     if tols.nullspace_rtol == 0
@@ -216,18 +226,20 @@ function _interpolate_symmetry_function(
     return rational_function(coeffs, num_mons, denom_mons; logging=false, tol=tols.sparsify_tol)
 end
 
-function _interpolate_symmetry_function(
-    permutation::Vector{Int},
-    values::AbstractArray{T, 2},
+function _interpolate_deck_function(
+    deck_permutation::Vector{Int},
+    function_id::Int,
+    solutions::AbstractArray{T, 3},
     eval_mons::AbstractArray{T, 3},
     mons::MonomialVector,
     tols::Tolerances;
     logging::Bool=false
 ) where {T<:Complex}
 
-    return _interpolate_symmetry_function(
-        permutation,
-        values,
+    return _interpolate_deck_function(
+        deck_permutation,
+        function_id,
+        solutions,
         eval_mons,
         eval_mons,
         mons,
@@ -271,9 +283,10 @@ function symmetries_fixing_parameters_graded!(
                     eval_denom_mons = HC.evaluate(denom_mons, F.samples)
                     for (j, symmetry) in enumerate(symmetries)
                         if ismissing(symmetry[i])
-                            symmetry[i] = _interpolate_symmetry_function(
+                            symmetry[i] = _interpolate_deck_function(
                                 C[j],
-                                view(F.samples.solutions, i, :, :),
+                                i,
+                                F.samples.solutions,
                                 eval_num_mons,
                                 eval_denom_mons,
                                 num_mons,
@@ -354,9 +367,10 @@ function symmetries_fixing_parameters_dense!(
             logging && printstyled("Interpolating the ", i, "-th symmetry map...\n"; color=:blue)
             for j in 1:n_unknowns
                 if ismissing(symmetry[j])
-                    symmetry[j] = _interpolate_symmetry_function(
+                    symmetry[j] = _interpolate_deck_function(
                         C[i],
-                        view(F.samples.solutions, j, :, :),
+                        j,
+                        F.samples.solutions,
                         evaluated_mons,
                         mons,
                         tols;
@@ -387,6 +401,21 @@ function symmetries_fixing_parameters_dense!(
 end
 
 to_CC(scaling::Tuple{Int, Vector{Int}}) = [cis(2*pi*k/scaling[1]) for k in scaling[2]]
+
+function _deck_map(
+    deck_permutation::Vector{Int},
+    (x₀, p₀)::NTuple{2, AbstractVector{<:Number}},
+    F::SampledSystem;
+    tol::Real=1e-5
+)
+    sols, params = F.samples.solutions, F.samples.parameters
+    instance_id = rand(1:size(sols, 3))
+    p₁ = params[:, instance_id]
+    x₁ = HC.track((x₀, p₀), p₁, F.system)
+    x₁_id = findfirst(x₁, sols[:,:,instance_id]; tol=tol)
+    Ψ_x₁ = sols[:,deck_permutation[x₁_id], instance_id]
+    return HC.track((Ψ_x₁, p₁), p₀, F.system)
+end
 
 # verify for all of the solutions in 1 instance
 function _all_deck_commute(
