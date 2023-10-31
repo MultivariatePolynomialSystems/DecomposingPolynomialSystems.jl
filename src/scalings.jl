@@ -2,7 +2,7 @@ export Grading,
     ScalingGroup,
     scaling_symmetries
 
-using AbstractAlgebra: ZZ, matrix, residue_ring, lift, hnf, snf_with_transform 
+using AbstractAlgebra: ZZ, matrix, GF, lift, hnf, snf_with_transform 
 using LinearAlgebra: diag
 
 mutable struct Grading
@@ -158,7 +158,15 @@ end
 function _hnf_reduce(grading::Grading)
     U₀ = grading.free_part
     hnf_U₀ = isnothing(U₀) ? nothing : Matrix(hnf(matrix(ZZ, U₀)))
-    hnf_Uᵢs = [(sᵢ, lift.(Matrix(hnf(matrix(residue_ring(ZZ, sᵢ), Uᵢ))))) for (sᵢ, Uᵢ) in grading.mod_part]
+    hnf_Uᵢs = Vector{Tuple{Int, Matrix{Int}}}([])
+    for (sᵢ, Uᵢ) in grading.mod_part
+        try
+            Uᵢ = Int.(lift.(Matrix(hnf(matrix(GF(sᵢ), Uᵢ)))))
+        catch
+            Uᵢ = mod.(Uᵢ, sᵢ)
+        end
+        push!(hnf_Uᵢs, (sᵢ, Uᵢ))
+    end
     return Grading(hnf_U₀, hnf_Uᵢs)
 end
 

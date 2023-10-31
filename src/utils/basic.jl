@@ -17,8 +17,6 @@ eye(T, n::Integer) = Matrix{T}(I(n))
 num_mons(n::Integer, d::Integer) = n > 0 ? binomial(n - 1 + d, d) : 0
 num_mons_upto(n::Integer, d::Integer) = n > 0 ? binomial(n + d, d) : 0
 
-Base.mod(v::Vector{<:Number}, n::Number) = [mod(vᵢ, n) for vᵢ in v]
-
 # TODO: test this
 function sparsify!(v::AbstractVector{<:Number}, tol::Real; digits::Integer=0)
     for j in eachindex(v)

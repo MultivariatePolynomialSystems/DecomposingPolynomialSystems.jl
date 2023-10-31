@@ -22,7 +22,7 @@ end
 function Base.show(io::IO, samples::VarietySamples)
     println(io, "VarietySamples")
     println(io, " solutions:")
-    print(io, " parameters:")
+    println(io, " parameters:")
 end
 
 mutable struct SampledSystem
@@ -90,6 +90,8 @@ variables(F::SampledSystem) = variables(F.system)
 n_unknowns(F::SampledSystem) = length(unknowns(F))
 n_parameters(F::SampledSystem) = length(parameters(F))
 n_variables(F::SampledSystem) = length(variables(F))
+
+(F::SampledSystem)(x₀::AbstractVector{<:Number}, p₀::AbstractVector{<:Number}) = F.system(x₀, p₀)
 
 function run_monodromy(
     F::System,
@@ -190,9 +192,9 @@ function sample_system!(F::SampledSystem, n_instances::Int)
 end
 
 function HC.track(
+    F::System,
     (x₀, p₀)::NTuple{2, AbstractVector{<:Number}},
-    p₁::AbstractVector{<:Number},
-    F::System
+    p₁::AbstractVector{<:Number}
 )
     data_points = HC.solve(
         F,

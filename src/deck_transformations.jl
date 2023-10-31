@@ -5,7 +5,7 @@ export Tolerances,
     symmetries_fixing_parameters_graded!,
     symmetries_fixing_parameters!,
     symmetries_fixing_parameters,
-    _deck_map
+    _deck_map, _deck_commutes_with_scaling
 
 @kwdef struct Tolerances
     nullspace_atol::Float64=0
@@ -148,16 +148,6 @@ function _deck_vandermonde_matrix(
         A[rows, (n_num_mons+1):end] = -transpose(eval_denom_mons[:, i, :]).*v
     end
     return A
-end
-
-function _deck_vandermonde_matrix(
-    deck_permutation::Vector{Int},
-    function_id::Int,
-    solutions::AbstractArray{T, 3},
-    eval_mons::AbstractArray{T, 3}
-) where {T<:Complex}
-
-    return _deck_vandermonde_matrix(deck_permutation, function_id, solutions, eval_mons, eval_mons)
 end
 
 function _all_interpolated(symmetries::Vector{Vector{MiExpression}})
@@ -411,38 +401,48 @@ function _deck_map(
     sols, params = F.samples.solutions, F.samples.parameters
     instance_id = rand(1:size(sols, 3))
     p₁ = params[:, instance_id]
-    x₁ = HC.track((x₀, p₀), p₁, F.system)
+    x₁ = HC.track(F.system, (x₀, p₀), p₁)
     x₁_id = findfirst(x₁, sols[:,:,instance_id]; tol=tol)
+    isnothing(x₁_id) && return nothing
     Ψ_x₁ = sols[:,deck_permutation[x₁_id], instance_id]
-    return HC.track((Ψ_x₁, p₁), p₀, F.system)
+    return HC.track(F.system, (Ψ_x₁, p₁), p₀)
 end
 
-# verify for all of the solutions in 1 instance
+# supposes scaling is a symmetry of F
+function _deck_commutes_with_scaling(
+    deck_permutation::Vector{Int},
+    scaling::Tuple{Int, Vector{Int}},
+    F::SampledSystem;
+    tol::Real=1e-5
+)
+    sols, params = F.samples.solutions, F.samples.parameters
+    inst_id = rand(1:size(sols, 3))
+    p₀ = params[:, inst_id]
+    Φ_p₀ = to_CC(scaling)[end-n_parameters(F)+1:end].*p₀
+    sol_id = rand(1:size(sols, 2))
+    x₀ = sols[:, sol_id, inst_id]
+    println(norm(F.system(x₀, p₀)))
+    Ψ_x₀ = sols[:, deck_permutation[sol_id], inst_id]
+    Φ_x₀ = to_CC(scaling)[1:n_unknowns(F)].*x₀
+    ΦΨ_x₀ = to_CC(scaling)[1:n_unknowns(F)].*Ψ_x₀
+    println(norm(F.system(Φ_x₀, Φ_p₀)))
+    ΨΦ_x₀ = _deck_map(deck_permutation, (Φ_x₀, Φ_p₀), F; tol=tol)
+    isnothing(ΨΦ_x₀) && return false
+    return norm(ΦΨ_x₀-ΨΦ_x₀)<tol
+end
+
 function _all_deck_commute(
     F::SampledSystem,
     scaling::Tuple{Int, Vector{Int}};
     tol::Real=1e-5
 )
-    instance_id = rand(1:size(F.samples.solutions, 3))
-    sols1 = F.samples.solutions[:, :, instance_id]
-    params1 = F.samples.parameters[:, instance_id]
-    params2 = to_CC(scaling)[end-n_parameters(F)+1:end].*params1
-    println("Starting sampling...")
-    sample_system!(F, params2)  # TODO: what if n_sols is huge?
-    println("Finished sampling...")
-    sols2 = F.samples.solutions[:, :, end]
-    for perm in F.deck_permutations
-        for i in axes(sols1, 2)
-            Φ_sol = to_CC(scaling)[1:n_unknowns(F)].*sols1[:, i]
-            id = findfirst(Φ_sol, sols2; tol=tol)
-            if isnothing(id) return false end
-            ΨΦ_sol = sols2[:, perm[id]]
-            Ψ_sol = sols1[:, perm[i]]
-            ΦΨ_sol = to_CC(scaling)[1:n_unknowns(F)].*Ψ_sol
-            if norm(ΨΦ_sol-ΦΨ_sol)>tol return false end
+    all_commute = true
+    for deck_permutation in F.deck_permutations
+        if !_deck_commutes_with_scaling(deck_permutation, scaling, F; tol=tol)
+            all_commute = false
         end
     end
-    return true
+    return all_commute
 end
 
 function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingGroup)
