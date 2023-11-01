@@ -3,7 +3,10 @@ module DecomposingPolynomialSystems
 import HomotopyContinuation
 const HC = HomotopyContinuation
 using HomotopyContinuation.ModelKit
-export @var, Variable, Expression, System, track
+export @var, Variable, Expression, System
+
+# Exports for testing
+# export degree
 
 using LinearAlgebra: nullspace
 

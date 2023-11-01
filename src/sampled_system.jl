@@ -9,7 +9,8 @@ export SampledSystem,
     n_parameters,
     n_variables
 
-using HomotopyContinuation: Result, MonodromyResult, track
+using HomotopyContinuation: Result, MonodromyResult
+using HomotopyContinuation: ParameterHomotopy, Tracker, track
 
 # TODO: think about other ways to represent samples
 # TODO: make it parametric with T <: Number?
@@ -191,16 +192,11 @@ function sample_system!(F::SampledSystem, n_instances::Int)
     return Vector((n_computed_instances+1):n_instances)  # TODO: remove return?
 end
 
-function HC.track(
+function track_parameter_homotopy(
     F::System,
     (x₀, p₀)::NTuple{2, AbstractVector{<:Number}},
     p₁::AbstractVector{<:Number}
 )
-    data_points = HC.solve(
-        F,
-        [x₀],
-        start_parameters = p₀,
-        target_parameters = [p₁]
-    )
-    return HC.solutions(data_points[1][1])[1]
+    H = ParameterHomotopy(F; start_parameters=p₀, target_parameters=p₁)
+    return track(Tracker(H), x₀).solution
 end

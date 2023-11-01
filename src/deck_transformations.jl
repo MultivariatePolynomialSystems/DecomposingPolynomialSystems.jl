@@ -5,16 +5,15 @@ export Tolerances,
     symmetries_fixing_parameters_graded!,
     symmetries_fixing_parameters!,
     symmetries_fixing_parameters,
-    _deck_map, _deck_commutes_with_scaling
+    _deck_map, _deck_commutes_with_scaling,
+    _scalings_commuting_with_deck
 
 @kwdef struct Tolerances
     nullspace_atol::Float64=0
     nullspace_rtol::Float64=0
-    rref_tol::Float64
-    sparsify_tol::Float64
+    rref_tol::Float64=1e-5
+    sparsify_tol::Float64=1e-5
 end
-
-Tolerances(tol::Real) = Tolerances(rref_tol=tol, sparsify_tol=tol)
 
 MiExpression = Union{Missing, Expression}
 
@@ -87,7 +86,7 @@ function _denom_deg(num_deg::Vector{Int}, grading::Grading, var_id::Int)
     end
     for (sᵢ, Uᵢ) in grading.mod_part
         n_scalings = size(Uᵢ, 1)
-        denom_deg[k+1:k+n_scalings] = mod(num_deg[k:k+n_scalings-1] - Uᵢ[:, var_id], sᵢ)
+        denom_deg[k+1:k+n_scalings] = mod.(num_deg[k+1:k+n_scalings] - Uᵢ[:, var_id], sᵢ)
         k += n_scalings
     end
     return denom_deg
@@ -184,7 +183,7 @@ function _interpolate_deck_function(
 
     logging && println(
         "Creating vandermonde matrix of size ",
-        (prod(size(values)), length(num_mons)+length(denom_mons))
+        (prod([size(solutions,2), size(solutions,3)]), length(num_mons)+length(denom_mons))
     )
     A = _deck_vandermonde_matrix(
         deck_permutation,
@@ -244,7 +243,7 @@ function symmetries_fixing_parameters_graded!(
     scalings::ScalingGroup,
     mons::MonomialVector,
     classes::Dict{Vector{Int}, Vector{Int}};
-    tols::Tolerances=Tolerances(1e-5),
+    tols::Tolerances=Tolerances(),
     logging::Bool=false
 )
     
@@ -314,7 +313,7 @@ function symmetries_fixing_parameters_graded!(
     F::SampledSystem,
     scalings::ScalingGroup;
     degree_bound::Integer=1,
-    tols::Tolerances=Tolerances(1e-5),
+    tols::Tolerances=Tolerances(),
     logging::Bool=false
 )
 
@@ -334,7 +333,7 @@ function symmetries_fixing_parameters_dense!(
     F::SampledSystem; 
     degree_bound::Integer=1,
     param_dep::Bool=true,
-    tols::Tolerances=Tolerances(1e-5),
+    tols::Tolerances=Tolerances(),
     logging::Bool=false
 )
 
@@ -401,11 +400,11 @@ function _deck_map(
     sols, params = F.samples.solutions, F.samples.parameters
     instance_id = rand(1:size(sols, 3))
     p₁ = params[:, instance_id]
-    x₁ = HC.track(F.system, (x₀, p₀), p₁)
+    x₁ = track_parameter_homotopy(F.system, (x₀, p₀), p₁)  # along path γ in the parameter space
     x₁_id = findfirst(x₁, sols[:,:,instance_id]; tol=tol)
     isnothing(x₁_id) && return nothing
     Ψ_x₁ = sols[:,deck_permutation[x₁_id], instance_id]
-    return HC.track(F.system, (Ψ_x₁, p₁), p₀)
+    return track_parameter_homotopy(F.system, (Ψ_x₁, p₁), p₀)  # should be along the same path γ
 end
 
 # supposes scaling is a symmetry of F
@@ -421,11 +420,9 @@ function _deck_commutes_with_scaling(
     Φ_p₀ = to_CC(scaling)[end-n_parameters(F)+1:end].*p₀
     sol_id = rand(1:size(sols, 2))
     x₀ = sols[:, sol_id, inst_id]
-    println(norm(F.system(x₀, p₀)))
     Ψ_x₀ = sols[:, deck_permutation[sol_id], inst_id]
     Φ_x₀ = to_CC(scaling)[1:n_unknowns(F)].*x₀
     ΦΨ_x₀ = to_CC(scaling)[1:n_unknowns(F)].*Ψ_x₀
-    println(norm(F.system(Φ_x₀, Φ_p₀)))
     ΨΦ_x₀ = _deck_map(deck_permutation, (Φ_x₀, Φ_p₀), F; tol=tol)
     isnothing(ΨΦ_x₀) && return false
     return norm(ΦΨ_x₀-ΨΦ_x₀)<tol
@@ -440,6 +437,7 @@ function _all_deck_commute(
     for deck_permutation in F.deck_permutations
         if !_deck_commutes_with_scaling(deck_permutation, scaling, F; tol=tol)
             all_commute = false
+            break
         end
     end
     return all_commute
@@ -450,7 +448,7 @@ function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingGroup)
     final_grading = Grading(grading.free_part, [])
     for (sᵢ, Uᵢ) in grading.mod_part
         Vᵢ = Array{Int}(undef, 0, size(Uᵢ, 2))
-        # TODO: Uᵢ ↦ all linear combinations of rows of Uᵢ
+        # TODO: Uᵢ ↦ all linear combinations of rows of Uᵢ (might not commute with 2 gens, but commutes with their combination)
         for j in axes(Uᵢ, 1)
             if _all_deck_commute(F, (sᵢ, Uᵢ[j, :]))
                 Vᵢ = [Vᵢ; hcat(Uᵢ[j, :]...)]
@@ -467,7 +465,7 @@ function symmetries_fixing_parameters!(
     F::SampledSystem;
     degree_bound::Integer=1,
     param_dep::Bool=true,
-    tols::Tolerances=Tolerances(1e-5),
+    tols::Tolerances=Tolerances(),
     logging::Bool=false
 )
 
@@ -475,7 +473,6 @@ function symmetries_fixing_parameters!(
         return DeckTransformationGroup(F)
     end
 
-    # scalings = scaling_symmetries(F)
     scalings = _scalings_commuting_with_deck(F, scaling_symmetries(F))
     scalings = param_dep ? scalings : restrict_scalings(scalings, unknowns(F))  # TODO: justify!
     if isempty(scalings.grading)
@@ -538,7 +535,7 @@ function symmetries_fixing_parameters(  # TODO: extend to take an expression map
     xp₀::Union{Nothing, NTuple{2, AbstractVector{<:Number}}}=nothing,
     degree_bound::Integer=1,
     param_dep::Bool=true,
-    tols::Tolerances=Tolerances(1e-5),
+    tols::Tolerances=Tolerances(),
     monodromy_options::Tuple=(),
     logging::Bool=false
 )

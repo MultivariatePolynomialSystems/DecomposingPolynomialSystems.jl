@@ -225,7 +225,7 @@ function restrict_scalings(scalings::ScalingGroup, var_ids::Vector{Int})
     restr_grading = copy(scalings.grading)
     U₀ = restr_grading.free_part
     restr_grading.free_part = isnothing(U₀) ? nothing : U₀[:, var_ids]
-    for (sᵢ, Uᵢ) in restr_grading.mod_part
+    for (i, (sᵢ, Uᵢ)) in enumerate(restr_grading.mod_part)
         restr_grading.mod_part[i] = (sᵢ, Uᵢ[:, var_ids])
     end
     return ScalingGroup(reduce(restr_grading), scalings.vars[var_ids])
@@ -252,7 +252,7 @@ scaling_symmetries(
 function HC.degree(md::Vector{<:Integer}, grading::Grading)
     U₀ = grading.free_part
     deg_free = isnothing(U₀) ? Vector{Int}([]) : U₀*md
-    return vcat(deg_free, [mod(Uᵢ*md, sᵢ) for (sᵢ, Uᵢ) in grading.mod_part]...)
+    return vcat(deg_free, [mod.(Uᵢ*md, sᵢ) for (sᵢ, Uᵢ) in grading.mod_part]...)
 end
 
 HC.degree(mon::Monomial, grading::Grading) = degree(mon.md, grading)
