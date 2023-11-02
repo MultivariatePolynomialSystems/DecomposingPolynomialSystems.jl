@@ -5,7 +5,7 @@ export Tolerances,
     symmetries_fixing_parameters_graded!,
     symmetries_fixing_parameters!,
     symmetries_fixing_parameters,
-    _deck_map, _deck_commutes_with_scaling,
+    _deck_action, _deck_commutes_with_scaling,
     _scalings_commuting_with_deck
 
 @kwdef struct Tolerances
@@ -283,8 +283,8 @@ function symmetries_fixing_parameters_graded!(
                                 tols;
                                 logging=logging
                             )
-                            if !ismissing(symmetry[i])
-                                logging && printstyled(
+                            if logging && !ismissing(symmetry[i])
+                                printstyled(
                                     "Good representative for the ",
                                     to_ordinal(j),
                                     " symmetry, variable ",
@@ -292,7 +292,7 @@ function symmetries_fixing_parameters_graded!(
                                     ":\n",
                                     color=:red
                                 )
-                                logging && println(symmetry[i])
+                                println(symmetry[i])
                             end
                         end
                     end
@@ -351,7 +351,7 @@ function symmetries_fixing_parameters_dense!(
 
         logging && println("Evaluating monomials...\n")
         evaluated_mons = HC.evaluate(mons, F.samples)
-        
+
         for (i, symmetry) in enumerate(symmetries)
             logging && printstyled("Interpolating the ", i, "-th symmetry map...\n"; color=:blue)
             for j in 1:n_unknowns
@@ -365,8 +365,8 @@ function symmetries_fixing_parameters_dense!(
                         tols;
                         logging=logging
                     )
-                    if !ismissing(symmetry[j])
-                        logging && printstyled(
+                    if logging && !ismissing(symmetry[j])
+                        printstyled(
                             "Good representative for the ",
                             i,
                             "-th symmetry, variable ",
@@ -374,7 +374,7 @@ function symmetries_fixing_parameters_dense!(
                             ":\n";
                             color=:red
                         )
-                        logging && println(symmetry[j])
+                        println(symmetry[j])
                     end
                 end
             end
@@ -391,7 +391,7 @@ end
 
 to_CC(scaling::Tuple{Int, Vector{Int}}) = [cis(2*pi*k/scaling[1]) for k in scaling[2]]
 
-function _deck_map(
+function _deck_action(
     deck_permutation::Vector{Int},
     (x₀, p₀)::NTuple{2, AbstractVector{<:Number}},
     F::SampledSystem;
@@ -404,7 +404,8 @@ function _deck_map(
     x₁_id = findfirst(x₁, sols[:,:,instance_id]; tol=tol)
     isnothing(x₁_id) && return nothing
     Ψ_x₁ = sols[:,deck_permutation[x₁_id], instance_id]
-    return track_parameter_homotopy(F.system, (Ψ_x₁, p₁), p₀)  # should be along the same path γ
+    Ψ_x₀ = track_parameter_homotopy(F.system, (Ψ_x₁, p₁), p₀)  # should be along the same path γ
+    return Ψ_x₀
 end
 
 # supposes scaling is a symmetry of F
@@ -423,7 +424,7 @@ function _deck_commutes_with_scaling(
     Ψ_x₀ = sols[:, deck_permutation[sol_id], inst_id]
     Φ_x₀ = to_CC(scaling)[1:n_unknowns(F)].*x₀
     ΦΨ_x₀ = to_CC(scaling)[1:n_unknowns(F)].*Ψ_x₀
-    ΨΦ_x₀ = _deck_map(deck_permutation, (Φ_x₀, Φ_p₀), F; tol=tol)
+    ΨΦ_x₀ = _deck_action(deck_permutation, (Φ_x₀, Φ_p₀), F; tol=tol)
     isnothing(ΨΦ_x₀) && return false
     return norm(ΦΨ_x₀-ΨΦ_x₀)<tol
 end
