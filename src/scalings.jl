@@ -249,6 +249,7 @@ scaling_symmetries(
     vars::Vector{Variable}
 ) = scaling_symmetries(F.system, vars)
 
+# TODO: extend to scalings::ScalingGroup?
 function HC.degree(md::Vector{<:Integer}, grading::Grading)
     U₀ = grading.free_part
     deg_free = isnothing(U₀) ? Vector{Int}([]) : U₀*md

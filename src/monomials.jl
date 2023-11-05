@@ -22,6 +22,19 @@ function Monomial{T}(var::Variable, vars::Vector{Variable}) where {T<:Integer}
     md[findfirst(x->x==var, vars)] = 1
     return Monomial{T}(md, vars)
 end
+
+function Monomial{T}(
+    mon::Expression,
+    vars::Vector{Variable}
+) where {T<:Integer}
+    es, cs = exponents_coefficients(mon, vars)
+    if length(cs) > 1 || !isone(cs[1])
+        throw(ArgumentError("Input expression is not a monomial"))
+    else
+        return Monomial{T}(es[:,1], vars)
+    end
+end
+
 Base.isone(mon::Monomial) = iszero(mon.md)
 Base.convert(::Type{Expression}, mon::Monomial) = prod(mon.vars.^mon.md)
 Base.:(==)(m₁::Monomial, m₂::Monomial) = Expression(m₁) == Expression(m₂)
@@ -48,7 +61,7 @@ Base.getindex(
     mons::MonomialVector,
     inds...
 ) = MonomialVector(getindex(mons.mds, inds...), mons.vars)
-Base.findfirst(f::Function, mons::MonomialVector) = findfirst(f, mons.mds)
+# Base.findfirst(f::Function, mons::MonomialVector) = findfirst(f, mons.mds)
 Base.findfirst(m::Monomial, mons::MonomialVector) = findfirst(x->x==m.md, mons.mds)
 
 function Base.vcat(monVs::MonomialVector...)
@@ -76,16 +89,16 @@ function multidegrees_affine(n::Integer, d::T) where {T<:Integer}
 end
 
 function MonomialVector{T}(
-    vars::Vector{Variable},
-    d::Integer;
+    vars::Vector{Variable};
+    degree::Integer,
     homogeneous::Bool=false
 ) where {T<:Integer}
 
-    d = convert(T, d)
+    degree = convert(T, degree)
     if homogeneous
-        return MonomialVector(multidegrees_homogeneous(length(vars), d), vars)
+        return MonomialVector(multidegrees_homogeneous(length(vars), degree), vars)
     end
-    return MonomialVector(multidegrees_affine(length(vars), d), vars)
+    return MonomialVector(multidegrees_affine(length(vars), degree), vars)
 end
 
 function to_expressions(mons::MonomialVector)

@@ -77,6 +77,7 @@ end
 
 Base.getindex(deck::DeckTransformationGroup, inds...) = getindex(deck.maps, inds...)
 
+# TODO: extend to scalings::ScalingGroup?
 function _denom_deg(num_deg::Vector{Int}, grading::Grading, var_id::Int)
     denom_deg = zeros(Int, length(num_deg))
     U₀ = grading.free_part
@@ -106,7 +107,7 @@ function _remove_zero_nums_and_denoms(
     n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
     @assert size(coeffs, 2) == n_num_mons + n_denom_mons
     for i in axes(coeffs, 1)
-        if (!all(iszero, coeffs[i, 1:n_num_mons]) && !all(iszero, coeffs[i, n_num_mons+1:end]))
+        if (!iszero(coeffs[i, 1:n_num_mons]) && !iszero(coeffs[i, n_num_mons+1:end]))
             push!(reasonable_rows, i)
         elseif logging
             println("Removed: ",
@@ -317,7 +318,7 @@ function symmetries_fixing_parameters_graded!(
     logging::Bool=false
 )
 
-    mons = MonomialVector{Int8}(scalings.vars, degree_bound)
+    mons = MonomialVector{Int8}(scalings.vars; degree=degree_bound)
     classes = to_classes(mons, scalings.grading)
     return symmetries_fixing_parameters_graded!(
         F,
