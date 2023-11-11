@@ -39,6 +39,7 @@ DeckTransformationGroup of order 4
    x₁ ↦ -im*x₂
    x₂ ↦ im*x₁
 ```
+where `im` is the imaginary unit.
 ### Computing invariants
 TBA...
 ### Decomposition
