@@ -1,6 +1,6 @@
-export gcd_mds, mds2mons, only_param_dep
-export partition_multidegrees
-export interpolate_vanishing_polynomials
+export rational_function,
+    polynomial_function,
+    remove_zero_nums_and_denoms
 
 using LinearAlgebra: norm, dot
 
@@ -11,46 +11,49 @@ function check_func_type(func_type::String)
 end
 
 function rational_function(
-    coeffs::AbstractVector{CC},
+    coeffs::AbstractVector{<:Number},
     num_mons::MonomialVector,
     denom_mons::MonomialVector;
-    logging::Bool=true,
+    logging::Bool=false,
     tol::Float64=1e-5
 )
     n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
     @assert length(coeffs) == n_num_mons + n_denom_mons
-    numerator, denominator = coeffs[1:n_num_mons], coeffs[n_num_mons+1:end]
-    if norm(numerator) < tol
-        @warn "Zero numerator"
+    num, denom = coeffs[1:n_num_mons], coeffs[n_num_mons+1:end]
+    if sum((!iszero).(denom)) == 1
+        id = findfirst(!iszero, denom)
+        num /= denom[id]
+        sparsify!(num, tol; digits=1)
+        denom[id] = 1
     end
-    @assert norm(denominator) > tol
-    # set 1st nonzero element of denominator to 1 (for pretty results w/o e-16 parts in division below)
-    t = denominator[denominator .!= 0][1]
-    numerator /= t
-    denominator /= t
-    p = dot(numerator, to_expressions(num_mons))
-    q = dot(denominator, to_expressions(denom_mons))
+    num, denom = simplify_numbers(num), simplify_numbers(denom)
+    if norm(num) < tol
+        @warn "Numerator close to zero"
+    end
+    @assert norm(denom) > tol
     if logging
-        println("rational function = ", p/q)
-        println("numerator = ", p)
-        println("denominator = ", q)
+        println("numerator = ", sum(to_expressions(num_mons).*num))
+        println("denominator = ", sum(to_expressions(denom_mons).*denom))
     end
+    p = sum(to_expressions(num_mons).*num)
+    q = sum(to_expressions(denom_mons).*denom)
+    logging && println("rational function = ", p/q)
     return p/q
 end
 
 function polynomial_function(
-    coeffs::AbstractVector{CC},
+    coeffs::AbstractVector{<:Number},
     mons::MonomialVector;
-    logging::Bool=true
+    logging::Bool=false
 )
     @assert length(coeffs) == length(mons.mds)
-    p = dot(coeffs, to_expressions(mons))
+    p = sum(to_expressions(mons).*coeffs)
     logging && println("polynomial = ", p)
     return p
 end
 
 function reconstruct_function(
-    coeffs::AbstractVector{CC},
+    coeffs::AbstractVector{<:Number},
     mons::MonomialVector;
     func_type::String,
     logging::Bool=true,
@@ -64,8 +67,46 @@ function reconstruct_function(
     end
 end
 
+function remove_zero_nums_and_denoms(
+    coeffs::AbstractMatrix{<:Number},
+    num_mons::MonomialVector,
+    denom_mons::MonomialVector;
+    logging::Bool=false
+)
+
+    reasonable_rows = []
+    n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
+    @assert size(coeffs, 2) == n_num_mons + n_denom_mons
+    for i in axes(coeffs, 1)
+        if (!iszero(coeffs[i, 1:n_num_mons]) && !iszero(coeffs[i, n_num_mons+1:end]))
+            push!(reasonable_rows, i)
+        elseif logging
+            if iszero(coeffs[i, 1:n_num_mons])
+                println(
+                    "Denominator removed: ",
+                    polynomial_function(coeffs[i, n_num_mons+1:end], denom_mons)
+                )
+            else
+                println(
+                    "Numerator removed: ",
+                    polynomial_function(coeffs[i, 1:n_num_mons], num_mons)
+                )
+            end
+        end
+    end
+    return coeffs[reasonable_rows, :]
+end
+
+function remove_zero_nums_and_denoms(
+    coeffs::AbstractMatrix{<:Number},
+    mons::MonomialVector;
+    logging::Bool=false
+)
+    return _remove_zero_nums_and_denoms(coeffs, mons, mons, logging=logging)
+end
+
 function rational_functions(
-    coeffs::AbstractMatrix{CC},
+    coeffs::AbstractMatrix{<:Number},
     num_mons::MonomialVector,
     denom_mons::MonomialVector;
     logging::Bool=true,
@@ -78,7 +119,7 @@ function rational_functions(
 end
 
 function reconstruct_functions(
-    coeffs::AbstractMatrix{CC},
+    coeffs::AbstractMatrix{<:Number},
     mons::MonomialVector;
     func_type::String,
     logging::Bool=true,
@@ -87,12 +128,12 @@ function reconstruct_functions(
     
 end
 
-function good_representative(coeffs::AbstractMatrix{CC})
+function good_representative(coeffs::AbstractMatrix{<:Number})
     return coeffs[findmin(vec(sum(coeffs .!= 0, dims=2)))[2], :]
 end
 
 # NOT READY YET...
-function best_representative(rational_functions::AbstractMatrix{CC}, tol::Float64)
+function best_representative(rational_functions::AbstractMatrix{<:Number}, tol::Float64)
     n_mons = Int(size(rational_functions, 2)/2)
     A = rational_functions[:,n_mons+1:end]
     A = [-1 zeros(1, n_mons-1); A]
@@ -103,8 +144,8 @@ function best_representative(rational_functions::AbstractMatrix{CC}, tol::Float6
 end
 
 function vandermonde_matrix(
-    values::AbstractVector{CC},
-    eval_mons::AbstractMatrix{CC},
+    values::AbstractVector{<:Number},
+    eval_mons::AbstractMatrix{<:Number},
     func_type::String
 )
     check_func_type(func_type)

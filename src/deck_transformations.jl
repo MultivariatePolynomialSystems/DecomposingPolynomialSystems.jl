@@ -64,7 +64,7 @@ end
 
 function Base.show(io::IO, deck::DeckTransformationGroup)
     println(io, "DeckTransformationGroup of order $(length(deck.maps))")
-    println(io, " structure: ", group_structure(deck.group))
+    println(io, " structure: ", order(deck.group) == 1 ? "trivial" : group_structure(deck.group))
     print(io, " action:")
     for i in eachindex(deck.maps)
         println(io, "\n  ", to_ordinal(i), " map:")
@@ -91,39 +91,6 @@ function _denom_deg(num_deg::Vector{Int}, grading::Grading, var_id::Int)
         k += n_scalings
     end
     return denom_deg
-end
-
-# TODO: Can it be eps close to zero? Then the method isn't correctly written...
-# TODO: Do we need printing? Then passing mons isn't necessary, just their number
-# TODO: change the name of the method?
-function _remove_zero_nums_and_denoms(
-    coeffs::AbstractMatrix{<:Number},
-    num_mons::MonomialVector,
-    denom_mons::MonomialVector;
-    logging::Bool=false
-)
-
-    reasonable_rows = []
-    n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
-    @assert size(coeffs, 2) == n_num_mons + n_denom_mons
-    for i in axes(coeffs, 1)
-        if (!iszero(coeffs[i, 1:n_num_mons]) && !iszero(coeffs[i, n_num_mons+1:end]))
-            push!(reasonable_rows, i)
-        elseif logging
-            println("Removed: ",
-                dot(coeffs[i, 1:n_num_mons], num_mons) + dot(coeffs[i, n_num_mons+1:end], denom_mons)  # TODO: convert to MonomialVector input
-            )
-        end
-    end
-    return coeffs[reasonable_rows, :]
-end
-
-function _remove_zero_nums_and_denoms(
-    coeffs::AbstractMatrix{<:Number},
-    mons::MonomialVector;
-    logging::Bool=false
-)
-    return _remove_zero_nums_and_denoms(coeffs, mons, mons, logging=logging)
 end
 
 function _deck_vandermonde_matrix(
@@ -209,11 +176,11 @@ function _interpolate_deck_function(
     coeffs = rref(coeffs, tols.rref_tol)
     
     sparsify!(coeffs, tols.sparsify_tol; digits=1)
-    coeffs = _remove_zero_nums_and_denoms(coeffs, num_mons, denom_mons)
+    coeffs = remove_zero_nums_and_denoms(coeffs, num_mons, denom_mons)
     if size(coeffs, 1) == 0 return missing end
 
     coeffs = good_representative(coeffs)
-    return rational_function(coeffs, num_mons, denom_mons; logging=false, tol=tols.sparsify_tol)
+    return rational_function(coeffs, num_mons, denom_mons; tol=tols.sparsify_tol)
 end
 
 function _interpolate_deck_function(
@@ -346,7 +313,7 @@ function symmetries_fixing_parameters_dense!(
 
     for d in 1:degree_bound
         logging && printstyled("Started interpolation for degree = ", d, "...\n"; color=:green)
-        mons = MonomialVector{Int8}(vars, d)
+        mons = MonomialVector{Int8}(vars, degree=d)
         n_instances = Int(ceil(2/n_sols*length(mons)))
         sample_system!(F, n_instances)
 

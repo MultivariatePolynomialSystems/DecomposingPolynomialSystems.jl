@@ -1,3 +1,7 @@
+export sparsify!,
+    simplify_numbers,
+    eye, a2p, p2a
+
 a2p(M::AbstractMatrix{<:Number}) = [M; ones(eltype(M), 1, size(M, 2))]
 p2a(M::AbstractMatrix{<:Number}) = (M./M[end:end,:])[1:end-1,:]
 
@@ -37,6 +41,25 @@ function sparsify!(M::AbstractMatrix{<:Number}, tol::Real; digits::Integer=0)
     for i in axes(M, 1)
         sparsify!(view(M, i, :), tol; digits=digits)
     end
+end
+
+function simplify_numbers(v::Vector{<:Number})
+    v = Vector{Number}(v)
+    for (i, vᵢ) in enumerate(v)
+        try
+            v[i] = Integer(vᵢ)
+        catch
+            try
+                v[i] = Real(vᵢ)
+            catch
+                try
+                    v[i] = Complex{Integer}(vᵢ)
+                catch
+                end
+            end
+        end
+    end
+    return v
 end
 
 function to_ordinal(n::Integer)::String

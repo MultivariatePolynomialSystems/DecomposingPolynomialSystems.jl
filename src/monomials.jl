@@ -2,7 +2,8 @@ export Monomial,
     MonomialVector,
     to_expressions,
     to_classes,
-    only_param_dep
+    only_param_dep,
+    n_only_param_dep
 
 # TODO: remove?
 # TODO: extend Number or nothing at all?
@@ -120,3 +121,8 @@ only_param_dep(
     mons::MonomialVector,
     unknowns_ids::Vector{Int}
 ) = only_param_dep(mons.mds, unknowns_ids)
+
+n_only_param_dep(
+    mons::MonomialVector,
+    unknown_ids::Vector{Int}
+) = sum([only_param_dep(md, unknown_ids) for md in mons.mds])

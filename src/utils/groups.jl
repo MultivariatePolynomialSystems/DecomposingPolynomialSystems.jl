@@ -6,6 +6,7 @@ to_gap = julia_to_gap
 to_julia = gap_to_julia
 
 group_structure(G::GapObj) = String(Gl.StructureDescription(G))
+order(G::GapObj) = Gl.Order(G)
 
 function group_structure(perms::Vector{Vector{Int}})
     return to_julia(Gl.StructureDescription(to_group(perms)))
