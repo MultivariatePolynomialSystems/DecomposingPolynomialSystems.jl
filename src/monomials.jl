@@ -64,6 +64,9 @@ Base.getindex(
 ) = MonomialVector(getindex(mons.mds, inds...), mons.vars)
 # Base.findfirst(f::Function, mons::MonomialVector) = findfirst(f, mons.mds)
 Base.findfirst(m::Monomial, mons::MonomialVector) = findfirst(x->x==m.md, mons.mds)
+function Base.push!(mons::MonomialVector{T}, md::Vector{T}) where {T<:Integer}
+    push!(mons.mds, md)
+end
 
 function Base.vcat(monVs::MonomialVector...)
     # TODO: check if mons.vars are all equal
@@ -72,7 +75,7 @@ end
 
 # TODO
 function Base.show(io::IO, mons::MonomialVector)
-    println(io, "$(length(mons.mds))-element $(typeof(mons))")
+    # println(io, "$(length(mons.mds))-element $(typeof(mons))")
     print(io, "[", join(to_expressions(mons), ", "), "]")
 end
 

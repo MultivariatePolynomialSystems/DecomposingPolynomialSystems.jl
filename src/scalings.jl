@@ -258,16 +258,29 @@ end
 
 HC.degree(mon::Monomial, grading::Grading) = degree(mon.md, grading)
 
-# TODO: Can we save multidegrees immediately?
-function to_classes(mons::MonomialVector, grading::Grading)
-    classes = Dict{Vector{Int}, Vector{Int}}()
-    for (i, md) in enumerate(mons.mds)
+function to_classes(mons::MonomialVector{T}, grading::Grading) where {T<:Integer}
+    classes = Dict{Vector{Int}, MonomialVector{T}}()
+    for md in mons.mds
         deg = HC.degree(md, grading)
         if isnothing(get(classes, deg, nothing)) # the key doesn't exist
-            classes[deg] = [i]
+            classes[deg] = MonomialVector{T}([md], mons.vars)
         else
-            push!(classes[deg], i)
+            push!(classes[deg], md)
         end
     end
     return classes
 end
+
+# TODO: Can we save multidegrees immediately?
+# function to_classes(mons::MonomialVector, grading::Grading)
+#     classes = Dict{Vector{Int}, Vector{Int}}()
+#     for (i, md) in enumerate(mons.mds)
+#         deg = HC.degree(md, grading)
+#         if isnothing(get(classes, deg, nothing)) # the key doesn't exist
+#             classes[deg] = [i]
+#         else
+#             push!(classes[deg], i)
+#         end
+#     end
+#     return classes
+# end

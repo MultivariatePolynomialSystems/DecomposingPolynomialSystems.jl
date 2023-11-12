@@ -209,13 +209,12 @@ end
 function symmetries_fixing_parameters_graded!(
     F::SampledSystem,
     scalings::ScalingGroup,
-    mons::MonomialVector,
-    classes::Dict{Vector{Int}, Vector{Int}};
+    mon_classes::Dict{Vector{Int}, MonomialVector{T}};
     tols::Tolerances=Tolerances(),
     logging::Bool=false
-)
+) where {T<:Integer}
     
-    max_n_mons = max(length.(collect(values(classes)))...)  # size of the largest class
+    max_n_mons = max(length.(collect(values(mon_classes)))...)  # size of the largest class
     n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
     n_instances = Int(ceil(2/n_sols*max_n_mons))
 
@@ -224,14 +223,12 @@ function symmetries_fixing_parameters_graded!(
 
     sample_system!(F, n_instances)
     
-    for (num_deg, num_ids) in classes
-        num_mons = mons[num_ids]
+    for (num_deg, num_mons) in mon_classes
         eval_num_mons = nothing
         for i in 1:n_unknowns
             denom_deg = _denom_deg(num_deg, scalings.grading, i)  # i-th variable
-            denom_ids = get(classes, denom_deg, nothing)
-            if !isnothing(denom_ids)
-                denom_mons = mons[denom_ids]
+            denom_mons = get(mon_classes, denom_deg, nothing)
+            if !isnothing(denom_mons)
                 g = gcd(vcat(num_mons, denom_mons))
                 if isone(g) && !only_param_dep(vcat(num_mons, denom_mons), Vector(1:n_unknowns))
                     if isnothing(eval_num_mons)
@@ -286,12 +283,11 @@ function symmetries_fixing_parameters_graded!(
 )
 
     mons = MonomialVector{Int8}(scalings.vars; degree=degree_bound)
-    classes = to_classes(mons, scalings.grading)
+    mon_classes = to_classes(mons, scalings.grading)
     return symmetries_fixing_parameters_graded!(
         F,
         scalings,
-        mons,
-        classes;
+        mon_classes;
         tols=tols,
         logging=logging
     )
