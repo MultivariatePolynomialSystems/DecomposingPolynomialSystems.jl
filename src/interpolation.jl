@@ -20,17 +20,18 @@ function rational_function(
     n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
     @assert length(coeffs) == n_num_mons + n_denom_mons
     num, denom = coeffs[1:n_num_mons], coeffs[n_num_mons+1:end]
-    if sum((!iszero).(denom)) == 1
-        id = findfirst(!iszero, denom)
-        num /= denom[id]
-        sparsify!(num, tol; digits=1)
-        denom[id] = 1
-    end
-    num, denom = simplify_numbers(num), simplify_numbers(denom)
     if norm(num) < tol
         @warn "Numerator close to zero"
     end
     @assert norm(denom) > tol
+    nonzero_ids = findall(!iszero, denom)
+    nonzero_denom = denom[nonzero_ids]
+    if all(x->x==nonzero_denom[1], nonzero_denom)
+        num /= nonzero_denom[1]
+        sparsify!(num, tol; digits=1)
+        denom[nonzero_ids] = ones(length(nonzero_ids))
+    end
+    num, denom = simplify_numbers(num), simplify_numbers(denom)
     if logging
         println("numerator = ", sum(to_expressions(num_mons).*num))
         println("denominator = ", sum(to_expressions(denom_mons).*denom))

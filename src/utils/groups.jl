@@ -14,7 +14,7 @@ end
 
 function to_group(perms::Vector{Vector{Int}})
     if length(perms) == 0
-        return GAP.evalstr( "Group(())" )  # TODO: raise error?
+        error("Cannot create a group: the list of permutations is empty")
     end
     Sym = Gl.SymmetricGroup(length(perms[1]))
     gap_gens = [Gl.PermList(to_gap(perm)) for perm in perms]
@@ -39,7 +39,10 @@ function centralizer(perms::Vector{Vector{Int}})
         return GAP.evalstr( "Group(())" )
     end
     Sym = Gl.SymmetricGroup(length(perms[1]))
-    cents = [Gl.Centralizer(Sym, Gl.PermList(to_gap(perms[i]))) for i in eachindex(perms)]
+    cents = [Gl.Centralizer(Sym, Gl.PermList(to_gap(perm))) for perm in perms]
+    if length(cents) == 1
+        return cents[1]
+    end
     return Gl.Intersection(cents...)
 end
 
@@ -102,7 +105,6 @@ function kernel_of_action_on_blocks(G::GapObj, block_partition::Vector{Vector{In
         Bi = block_partition[i]
         Si = Gl.Stabilizer(G, to_gap(Bi), Gl.OnSets)
         K = Gl.Intersection(K, Si)
-        println("i = ", i)
     end
     return K
 end

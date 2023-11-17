@@ -5,36 +5,82 @@ export SampledSystem,
     unknowns,
     parameters,
     variables,
-    n_unknowns,
-    n_parameters,
-    n_variables
+    nunknowns,
+    nparameters,
+    nvariables,
+    nsolutions,
+    nsamples,
+    ninstances,
+    monodromy_solutions,
+    monodromy_parameters,
+    monodromy_samples,
+    tracked_samples,
+    monodromy_permutations,
+    block_partitions,
+    deck_permutations
 
-using HomotopyContinuation: Result, MonodromyResult
+using HomotopyContinuation: Result, MonodromyResult, nsolutions, ntracked
 using HomotopyContinuation: ParameterHomotopy, Tracker, track
 
-# TODO: think about other ways to represent samples
-# TODO: make it parametric with T <: Number?
-struct VarietySamples
-    solutions::Array{CC, 3} # n_unknowns x n_sols x n_instances
-    parameters::Array{CC, 2} # n_params x n_instances
-end
-
-# TODO
-function Base.show(io::IO, samples::VarietySamples)
-    println(io, "VarietySamples")
-    println(io, " solutions:")
-    println(io, " parameters:")
-end
-
-mutable struct SampledSystem
-    system::System
-    samples::VarietySamples
+struct MonodromyInfo
+    n_solutions::Int
     monodromy_permutations::Vector{Vector{Int}}
     block_partitions::Vector{Vector{Vector{Int}}}
     deck_permutations::Vector{Vector{Int}}
 end
 
-function filter_permutations(perms::Matrix{Int})::Vector{Vector{Int}}
+MonodromyInfo() = MonodromyInfo(1, [], [], [])
+
+struct Samples
+    solutions::Array{ComplexF64, 3}  # n_unknowns x n_sols x n_instances
+    parameters::Array{ComplexF64, 2}  # n_params x n_instances
+end
+
+Samples(
+    sols::Matrix{ComplexF64},
+    params::Vector{ComplexF64}
+) = Samples(reshape(sols, size(sols)..., 1), reshape(params, :, 1))
+
+nsamples(samples::Samples) = size(samples.solutions, 2)*size(samples.solutions, 3)
+ninstances(samples::Samples) = size(samples.parameters, 2)
+
+mutable struct SampledSystem
+    system::System
+    mon_info::MonodromyInfo
+    samples::Dict{Vector{Int}, Samples} # key: ids of solution paths
+end
+
+unknowns(F::System) = HC.variables(F)
+unknowns(F::SampledSystem) = unknowns(F.system)
+HC.parameters(F::SampledSystem) = parameters(F.system)
+variables(F::System) = vcat(unknowns(F), parameters(F))  # does a different thing than HC.variables
+variables(F::SampledSystem) = variables(F.system)
+
+nunknowns(F::SampledSystem) = length(unknowns(F))  # equivalent to HC.nvariables
+HC.nparameters(F::SampledSystem) = length(parameters(F))
+nvariables(F::SampledSystem) = length(variables(F))  # doesn't extend HC.nvariables, does a different thing
+
+HC.nsolutions(F::SampledSystem) = F.mon_info.n_solutions
+
+function nsamples(F::SampledSystem)
+    return sum([nsamples(s) for s in values(samples(F))])
+end
+
+function ninstances(F::SampledSystem)
+    return sum([ninstances(s) for s in values(samples(F))])
+end
+
+samples(F::SampledSystem) = F.samples
+monodromy_permutations(F::SampledSystem) = F.mon_info.monodromy_permutations
+block_partitions(F::SampledSystem) = F.mon_info.block_partitions
+deck_permutations(F::SampledSystem) = F.mon_info.deck_permutations
+
+(F::SampledSystem)(
+    x₀::AbstractVector{<:Number},
+    p₀::AbstractVector{<:Number}
+) = F.system(x₀, p₀)
+
+function _filter_permutations(perms::Matrix{Int})::Vector{Vector{Int}}
     nsols = length(perms[:,1])
     return filter(
         x->!(0 in x) && (length(unique(x)) == nsols),
@@ -43,56 +89,59 @@ function filter_permutations(perms::Matrix{Int})::Vector{Vector{Int}}
 end
 
 function SampledSystem(F::System, MR::MonodromyResult)
-    sols = hcat(HC.solutions(MR)...)
-    sols, params = reshape(sols, size(sols)..., 1), reshape(MR.parameters, :, 1)
+    sols, params  = hcat(HC.solutions(MR)...), MR.parameters
+    n_sols = size(sols, 2)
 
-    # TODO: throw warning? Error?
-    if size(sols, 2) == 1
-        return SampledSystem(F,
-            VarietySamples(sols, params),
-            [], [], []
+    if n_sols == 1
+        @warn "Monodromy result has only 1 solution, no monodromy group available"
+        return SampledSystem(
+            F,
+            MonodromyInfo(),
+            Dict([1] => Samples(sols, params))
         )
     end
 
-    monodromy_permutations = filter_permutations(HC.permutations(MR))
+    monodromy_permutations = _filter_permutations(HC.permutations(MR))
     block_partitions = all_block_partitions(to_group(monodromy_permutations))
     deck_permutations = to_permutations(centralizer(monodromy_permutations))
 
     return SampledSystem(
         F,
-        VarietySamples(sols, params),
-        monodromy_permutations,
-        block_partitions,
-        deck_permutations
+        MonodromyInfo(
+            n_sols,
+            monodromy_permutations,
+            block_partitions,
+            deck_permutations
+        ),
+        Dict(Vector(1:n_sols) => Samples(sols, params))
     )
 end
 
 function Base.show(io::IO, F::SampledSystem)
-    sols = F.samples.solutions
-    n_samples = size(sols, 2)*size(sols, 3)
-    println(io, "SampledSystem with $(phrase(n_samples, "sample"))")
-    print(io, " $(phrase(n_unknowns(F), "unknown")): ", join(unknowns(F), ", "))
+    println(io, "SampledSystem with $(phrase(nsamples(F), "sample"))")
+    print(io, " $(phrase(nunknowns(F), "unknown")): ", join(unknowns(F), ", "))
     if !isempty(parameters(F))
-        print(io, "\n $(phrase(n_parameters(F), "parameter")): ", join(parameters(F), ", "))
+        print(io, "\n $(phrase(nparameters(F), "parameter")): ", join(parameters(F), ", "))
     end
     print(io, "\n\n")
-    println(io, " sampled instances: $(size(sols, 3))")
-    println(io, " solutions per instance: $(size(sols, 2))")
-    print(io, " deck permutations: $(length(F.deck_permutations))")
+    println(io, " number of solutions: $(nsolutions(F))")
+    println(io, " sampled instances: $(ninstances(F))")
+    print(io, " deck permutations: $(length(deck_permutations(F)))")
 end
 
-unknowns(F::System) = HC.variables(F)
-unknowns(F::SampledSystem) = unknowns(F.system)
-HC.parameters(F::SampledSystem) = parameters(F.system)
-variables(F::System) = vcat(unknowns(F), parameters(F))
-variables(F::SampledSystem) = variables(F.system)
+function random_instance(samples::Samples)
+    instance_id = rand(1:ninstances(samples))
+    return M2VV(samples.solutions[:, :, instance_id]), samples.parameters[:, instance_id]
+end
 
-# TODO: remove underscore?
-n_unknowns(F::SampledSystem) = length(unknowns(F))
-n_parameters(F::SampledSystem) = length(parameters(F))
-n_variables(F::SampledSystem) = length(variables(F))
-
-(F::SampledSystem)(x₀::AbstractVector{<:Number}, p₀::AbstractVector{<:Number}) = F.system(x₀, p₀)
+function random_samples(
+    F::SampledSystem;
+    path_ids::Vector{Int}
+)
+    samples = F.samples[Vector(1:nsolutions(F))]
+    instance_id = rand(1:ninstances(samples))
+    return M2VV(samples.solutions[:, path_ids, instance_id]), samples.parameters[:, instance_id]
+end
 
 function run_monodromy(
     F::System,
@@ -111,85 +160,89 @@ function run_monodromy(
     return SampledSystem(F, MR)
 end
 
-# TODO
 function run_monodromy(F::SampledSystem; options...)
-
+    xs, p = random_samples(F; path_ids=Vector(1:nsolutions(F)))
+    MR = HC.monodromy_solve(F.system, xs, p; permutations=true, options...)
+    if length(HC.solutions(MR)) == 1
+        error("Only 1 solution found, no monodromy group available. Try running again...")
+    end
+    return SampledSystem(F.system, MR)
 end
 
-function extract_samples(data_points::Vector{Tuple{Result, Vector{CC}}}, F::SampledSystem)::Tuple{Array{CC, 3}, Array{CC, 2}}
-    p0 = F.samples.parameters[:, 1]
-    sols0 = M2VV(F.samples.solutions[:, :, 1])
-    n_unknowns, n_sols, _ = size(F.samples.solutions)
-    n_params = length(p0)
-    n_instances = length(data_points)
-    all_sols = zeros(CC, n_unknowns, n_sols, n_instances)
-    all_params = zeros(CC, n_params, n_instances)
-    for i in 1:n_instances
-        sols = HC.solutions(data_points[i][1])
-        params = data_points[i][2]
-        while length(sols) != n_sols
-            # println("Tracking solutions again...")
-            res = HC.solve(F.system,
-                sols0,
-                start_parameters = p0,
-                target_parameters = [randn(CC, n_params)]
-            )
-            sols = HC.solutions(res[1][1])
-            params = res[1][2]
+function extract_samples(
+    results::Vector{Tuple{Result, Vector{ComplexF64}}},
+    F::SampledSystem;
+    resample::Bool=false
+)
+    n_tracked = ntracked(results[1][1])
+    n_instances = length(results)
+    all_sols = zeros(ComplexF64, nunknowns(F), n_tracked, n_instances)
+    all_params = zeros(ComplexF64, nparameters(F), n_instances)
+    k = 1
+    for (res, p) in results
+        sols = HC.solutions(res)
+        if length(sols) == n_tracked
+            all_sols[:, :, k] = hcat(sols...)
+            all_params[:, k] = p
+            k += 1
+        elseif !resample
+            error("Number of solutions in the $(k)-th result is $(length(sols)), expected $(n_tracked)")
         end
-        all_sols[:, :, i] = hcat(sols...)
-        all_params[:, i] = params
     end
-    return (all_sols, all_params)
+    for i in k:n_instances
+        while true
+            instance_id = rand(1:i-1)
+            p₀ = all_params[:, instance_id]
+            sols₀ = M2VV(all_sols[:, :, instance_id])
+            p₁ = randn(ComplexF64, nparameters(F))
+            res = HC.solve(
+                F.system,
+                sols₀,
+                start_parameters = p₀,
+                target_parameters = p₁
+            )
+            sols = HC.solutions(res)
+            if length(sols) == n_tracked
+                all_sols[:, :, i] = hcat(sols...)
+                all_params[:, i] = p₁
+                break
+            end
+        end
+    end
+    return all_sols, all_params
 end
 
-function sample_system!(F::SampledSystem, target_params::AbstractVector{<:Number})
-    instance_id = rand(1:size(F.samples.solutions, 3))
-    p0 = F.samples.parameters[:, instance_id]
-    sols = M2VV(F.samples.solutions[:, :, instance_id])
-    data_points = HC.solve(
-        F.system,
-        sols,
-        start_parameters = p0,
-        target_parameters = [target_params]
-    )
-    
-    n_unknowns, n_sols, _ = size(F.samples.solutions)
-    sols = zeros(CC, n_unknowns, n_sols, 1)
-    sols[:, :, 1] = hcat(HC.solutions(data_points[1][1])...) # TODO: what if n_sols is different?
-    n_params = size(F.samples.parameters, 1)
-    params = zeros(CC, n_params, 1)
-    params[:, 1] = data_points[1][2]
-    
-    all_sols = cat(F.samples.solutions, sols, dims=3)
-    all_params = cat(F.samples.parameters, params, dims=2)
-
-    F.samples = VarietySamples(all_sols, all_params)
-end
-
-# n_instances is the desired number of sampled instances in total
-function sample_system!(F::SampledSystem, n_instances::Int)
-    n_computed_instances = size(F.samples.parameters, 2)
-    if n_computed_instances < n_instances
-        p0 = F.samples.parameters[:, 1]
-        sols = M2VV(F.samples.solutions[:, :, 1])
-        target_params = [randn(CC, length(p0)) for _ in 1:(n_instances-n_computed_instances)]
-
-        # println("Solving ", n_instances-n_computed_instances, " instances by homotopy continutation...")
-        data_points = HC.solve(
+function sample_system!(
+    F::SampledSystem;
+    path_ids::Vector{Int}=Vector(1:nsolutions(F)),
+    n_instances::Int=1
+)
+    p₁s = [randn(ComplexF64, nparameters(F)) for _ in 1:n_instances]
+    samples = get(F.samples, path_ids, nothing)
+    if isnothing(samples)
+        sols₀, p₀ = random_samples(F; path_ids=path_ids)
+        res = HC.solve(
             F.system,
-            sols,
-            start_parameters = p0,
-            target_parameters = target_params
+            sols₀,
+            start_parameters = p₀,
+            target_parameters = p₁s
         )
-
-        solutions, parameters = extract_samples(data_points, F)
-        all_sols = cat(F.samples.solutions, solutions, dims=3)
-        all_params = cat(F.samples.parameters, parameters, dims=2)
-        F.samples = VarietySamples(all_sols, all_params)
+        sols, params = extract_samples(res, F; resample=true)
+        F.samples[path_ids] = Samples(sols, params)
+    else
+        sols₀, p₀ = random_instance(samples)
+        res = HC.solve(
+            F.system,
+            sols₀,
+            start_parameters = p₀,
+            target_parameters = p₁s
+        )
+        sols, params = extract_samples(res, F; resample=true)
+        sols = cat(samples.solutions, sols; dims=3)
+        params = cat(samples.parameters, params; dims=2)
+        F.samples[path_ids] = Samples(sols, params)
     end
-
-    return Vector((n_computed_instances+1):n_instances)  # TODO: remove return?
+    return F
 end
 
 function track_parameter_homotopy(
@@ -197,6 +250,10 @@ function track_parameter_homotopy(
     (x₀, p₀)::NTuple{2, AbstractVector{<:Number}},
     p₁::AbstractVector{<:Number}
 )
-    H = ParameterHomotopy(F; start_parameters=p₀, target_parameters=p₁)
-    return track(Tracker(H), x₀).solution
+    H = ParameterHomotopy(F; start_parameters=p₀, target_parameters=p₁) # straight line between p₀ and p₁
+    res = track(Tracker(H), x₀)
+    if !is_success(res)
+        @warn "Tracking was not successful: stopped at t = $(res.t)"
+    end
+    return res.solution
 end

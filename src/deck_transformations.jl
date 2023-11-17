@@ -96,16 +96,17 @@ end
 function _deck_vandermonde_matrix(
     deck_permutation::Vector{Int},
     function_id::Int,
-    solutions::AbstractArray{T, 3},
-    eval_num_mons::AbstractArray{T, 3},
-    eval_denom_mons::AbstractArray{T, 3}
-) where {T<:Complex}
-
+    solutions::AbstractArray{ComplexF64, 3},
+    eval_num_mons::AbstractArray{ComplexF64, 3},
+    eval_denom_mons::AbstractArray{ComplexF64, 3}
+)
     _, n_sols, n_instances = size(solutions)
     n_num_mons = size(eval_num_mons, 1)
     n_denom_mons = size(eval_denom_mons, 1)
 
-    A = zeros(T, n_instances*n_sols, n_num_mons+n_denom_mons)
+    # TODO: make n_rows close to n_cols by randomly picking solution ids
+    # TODO: sol_ids = rand(1:nsols, Int(ceil((n_num_mons+n_denom_mons)/n_instances)))
+    A = zeros(ComplexF64, n_instances*n_sols, n_num_mons+n_denom_mons)
     @assert size(A, 1) >= size(A, 2)
 
     for i in 1:n_sols
@@ -208,89 +209,74 @@ end
 
 function symmetries_fixing_parameters_graded!(
     F::SampledSystem,
-    scalings::ScalingGroup,
-    mon_classes::Dict{Vector{Int}, MonomialVector{T}};
-    tols::Tolerances=Tolerances(),
-    logging::Bool=false
-) where {T<:Integer}
-    
-    max_n_mons = max(length.(collect(values(mon_classes)))...)  # size of the largest class
-    n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
-    n_instances = Int(ceil(2/n_sols*max_n_mons))
-
-    C = F.deck_permutations
-    symmetries = _init_symmetries(length(C), unknowns(F))
-
-    sample_system!(F, n_instances)
-    
-    for (num_deg, num_mons) in mon_classes
-        eval_num_mons = nothing
-        for i in 1:n_unknowns
-            denom_deg = _denom_deg(num_deg, scalings.grading, i)  # i-th variable
-            denom_mons = get(mon_classes, denom_deg, nothing)
-            if !isnothing(denom_mons)
-                g = gcd(vcat(num_mons, denom_mons))
-                if isone(g) && !only_param_dep(vcat(num_mons, denom_mons), Vector(1:n_unknowns))
-                    if isnothing(eval_num_mons)
-                        eval_num_mons = HC.evaluate(num_mons, F.samples)
-                    end
-                    eval_denom_mons = HC.evaluate(denom_mons, F.samples)
-                    for (j, symmetry) in enumerate(symmetries)
-                        if ismissing(symmetry[i])
-                            symmetry[i] = _interpolate_deck_function(
-                                C[j],
-                                i,
-                                F.samples.solutions,
-                                eval_num_mons,
-                                eval_denom_mons,
-                                num_mons,
-                                denom_mons,
-                                tols;
-                                logging=logging
-                            )
-                            if logging && !ismissing(symmetry[i])
-                                printstyled(
-                                    "Good representative for the ",
-                                    to_ordinal(j),
-                                    " symmetry, variable ",
-                                    unknowns(F)[i],
-                                    ":\n",
-                                    color=:red
-                                )
-                                println(symmetry[i])
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        if _all_interpolated(symmetries)
-            logging && printstyled("--- All symmetries are interpolated ---\n", color=:blue)
-            return DeckTransformationGroup(symmetries, F)
-        end
-    end
-
-    return DeckTransformationGroup(symmetries, F)
-end
-
-function symmetries_fixing_parameters_graded!(
-    F::SampledSystem,
     scalings::ScalingGroup;
     degree_bound::Integer=1,
     tols::Tolerances=Tolerances(),
     logging::Bool=false
 )
+    
+    n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
+    C = F.deck_permutations
+    symmetries = _init_symmetries(length(C), unknowns(F))
 
-    mons = MonomialVector{Int8}(scalings.vars; degree=degree_bound)
-    mon_classes = to_classes(mons, scalings.grading)
-    return symmetries_fixing_parameters_graded!(
-        F,
-        scalings,
-        mon_classes;
-        tols=tols,
-        logging=logging
-    )
+    for d in 1:degree_bound
+        mons = MonomialVector{Int8}(scalings.vars; degree=d)
+        mon_classes = to_classes(mons, scalings.grading)
+
+        max_n_mons = max(length.(collect(values(mon_classes)))...)  # size of the largest class
+        n_instances = Int(ceil(2/n_sols*max_n_mons))
+        sample_system!(F, n_instances)
+        
+        for (num_deg, num_mons) in mon_classes
+            eval_num_mons = nothing
+            for i in 1:n_unknowns
+                denom_deg = _denom_deg(num_deg, scalings.grading, i)  # i-th variable
+                denom_mons = get(mon_classes, denom_deg, nothing)
+                if !isnothing(denom_mons)
+                    g = gcd(vcat(num_mons, denom_mons))
+                    if isone(g) && !only_param_dep(vcat(num_mons, denom_mons), Vector(1:n_unknowns))
+                        if isnothing(eval_num_mons)
+                            eval_num_mons = HC.evaluate(num_mons, F.samples)
+                        end
+                        eval_denom_mons = HC.evaluate(denom_mons, F.samples)
+                        for (j, symmetry) in enumerate(symmetries)
+                            if ismissing(symmetry[i])
+                                symmetry[i] = _interpolate_deck_function(
+                                    C[j],
+                                    i,
+                                    F.samples.solutions,
+                                    eval_num_mons,
+                                    eval_denom_mons,
+                                    num_mons,
+                                    denom_mons,
+                                    tols;
+                                    logging=logging
+                                )
+                                if logging && !ismissing(symmetry[i])
+                                    printstyled(
+                                        "Good representative for the ",
+                                        to_ordinal(j),
+                                        " symmetry, variable ",
+                                        unknowns(F)[i],
+                                        ":\n",
+                                        color=:red
+                                    )
+                                    println(symmetry[i])
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            if _all_interpolated(symmetries)
+                logging && printstyled("--- All symmetries are interpolated ---\n", color=:blue)
+                return DeckTransformationGroup(symmetries, F)
+            end
+        end
+    end
+
+    return DeckTransformationGroup(symmetries, F)
 end
 
 function symmetries_fixing_parameters_dense!(
