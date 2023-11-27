@@ -1,6 +1,7 @@
 export sparsify!,
     simplify_numbers,
-    eye, a2p, p2a
+    eye, a2p, p2a,
+    num_mons, num_mons_upto
 
 a2p(M::AbstractMatrix{<:Number}) = [M; ones(eltype(M), 1, size(M, 2))]
 p2a(M::AbstractMatrix{<:Number}) = (M./M[end:end,:])[1:end-1,:]
@@ -18,8 +19,8 @@ xx(v) = [0 -v[3] v[2]; v[3] 0 -v[1]; -v[2] v[1] 0]
 xx2v(xx) = [-xx[2,3], xx[1,3], -xx[1,2]]
 eye(T, n::Integer) = Matrix{T}(I(n))
 
-num_mons(n::Integer, d::Integer) = n > 0 ? binomial(n - 1 + d, d) : 0
-num_mons_upto(n::Integer, d::Integer) = n > 0 ? binomial(n + d, d) : 0
+num_mons(n::Integer, d::Integer) = n > 0 ? binomial(Int(n - 1 + d), Int(d)) : 0
+num_mons_upto(n::Integer, d::Integer) = n > 0 ? binomial(Int(n + d), Int(d)) : 0
 
 # TODO: test this
 function sparsify!(v::AbstractVector{<:Number}, tol::Real; digits::Integer=0)
@@ -38,8 +39,8 @@ function sparsify!(v::AbstractVector{<:Number}, tol::Real; digits::Integer=0)
 end
 
 function sparsify!(M::AbstractMatrix{<:Number}, tol::Real; digits::Integer=0)
-    for i in axes(M, 1)
-        sparsify!(view(M, i, :), tol; digits=digits)
+    for r in eachrow(M)
+        sparsify!(r, tol; digits=digits)
     end
 end
 
@@ -98,28 +99,17 @@ function superscript(n::Integer)::String
     return join(c)
 end
 
+# TODO: eachcol?
 Base.findfirst(
     v::AbstractVector{<:Number},
     M::AbstractMatrix{<:Number};
     tol::Real=1e-5
 ) = findfirst(i->norm(M[:,i]-v)<tol, axes(M,2))
 
-function Base.filter(f::Function, M::AbstractMatrix, dim::Integer)
-    if dim == 1
-
-    elseif dim == 2
-
-    end
-end
-
-# TODO: extend Base.filter?
-function filter_rows(f::Function, M::AbstractMatrix{T}) where {T}
-    filtered = filter(f, collect(eachrow(M)))
-    if length(filtered) == 0
-        return Matrix{T}(undef, 0, size(M, 2))
-    end
-    return transpose(hcat(filtered...))
-end
+take_rows(
+    f::Function,
+    M::AbstractMatrix{T}
+) where {T} = M[[f(r) for r in eachrow(M)], :]
 
 function column_diffs(M::AbstractMatrix{T}) where {T<:Number}
     M = M - M[:,1]*ones(T, 1, size(M,2))

@@ -1,5 +1,6 @@
 export SampledSystem,
-    VarietySamples,
+    MonodromyInfo,
+    Samples,
     run_monodromy,
     sample_system!,
     unknowns,
@@ -11,10 +12,7 @@ export SampledSystem,
     nsolutions,
     nsamples,
     ninstances,
-    monodromy_solutions,
-    monodromy_parameters,
-    monodromy_samples,
-    tracked_samples,
+    samples,
     monodromy_permutations,
     block_partitions,
     deck_permutations
@@ -41,8 +39,9 @@ Samples(
     params::Vector{ComplexF64}
 ) = Samples(reshape(sols, size(sols)..., 1), reshape(params, :, 1))
 
-nsamples(samples::Samples) = size(samples.solutions, 2)*size(samples.solutions, 3)
+HC.nsolutions(samples::Samples) = size(samples.solutions, 2)
 ninstances(samples::Samples) = size(samples.parameters, 2)
+nsamples(samples::Samples) = nsolutions(samples)*ninstances(samples)
 
 mutable struct SampledSystem
     system::System
@@ -129,7 +128,7 @@ function Base.show(io::IO, F::SampledSystem)
     print(io, " deck permutations: $(length(deck_permutations(F)))")
 end
 
-function random_instance(samples::Samples)
+function random_samples(samples::Samples)
     instance_id = rand(1:ninstances(samples))
     return M2VV(samples.solutions[:, :, instance_id]), samples.parameters[:, instance_id]
 end
@@ -230,7 +229,7 @@ function sample_system!(
         sols, params = extract_samples(res, F; resample=true)
         F.samples[path_ids] = Samples(sols, params)
     else
-        sols₀, p₀ = random_instance(samples)
+        sols₀, p₀ = random_samples(samples)
         res = HC.solve(
             F.system,
             sols₀,

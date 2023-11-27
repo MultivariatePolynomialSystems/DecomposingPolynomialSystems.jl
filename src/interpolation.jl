@@ -4,12 +4,6 @@ export rational_function,
 
 using LinearAlgebra: norm, dot
 
-function check_func_type(func_type::String)
-    if (func_type != "polynomial" && func_type != "rational")
-        error("func_type argument must be either \"polynomial\" or \"rational\"")
-    end
-end
-
 function rational_function(
     coeffs::AbstractVector{<:Number},
     num_mons::MonomialVector,
@@ -17,7 +11,7 @@ function rational_function(
     logging::Bool=false,
     tol::Float64=1e-5
 )
-    n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
+    n_num_mons, n_denom_mons = length(num_mons), length(denom_mons)
     @assert length(coeffs) == n_num_mons + n_denom_mons
     num, denom = coeffs[1:n_num_mons], coeffs[n_num_mons+1:end]
     if norm(num) < tol
@@ -51,6 +45,12 @@ function polynomial_function(
     p = sum(to_expressions(mons).*coeffs)
     logging && println("polynomial = ", p)
     return p
+end
+
+function check_func_type(func_type::String)
+    if (func_type != "polynomial" && func_type != "rational")
+        error("func_type argument must be either \"polynomial\" or \"rational\"")
+    end
 end
 
 function reconstruct_function(
@@ -160,7 +160,7 @@ end
 # supposes each md in mds is a multidegree in both unknowns and parameters
 # TODO: The implementation below (with _) is more efficient (approx 2x),
 # TODO: since it exploits the sparsity of multidegrees. REMOVE THIS METHOD?
-# function HomotopyContinuation.evaluate(mons::MonomialVector, samples::VarietySamples)
+# function HomotopyContinuation.evaluate(mons::MonomialVector, samples::Samples)
 #     solutions = samples.solutions
 #     parameters = samples.parameters
 
@@ -179,38 +179,6 @@ end
 #     end
 #     return evaluated_mons
 # end
-
-# TODO: consider view for slices
-function HC.evaluate(
-    mons::MonomialVector,
-    samples::VarietySamples;
-    sparse::Bool=false
-)
-    solutions = samples.solutions
-    parameters = samples.parameters
-
-    n_unknowns, n_sols, n_instances = size(solutions)
-    mds = mons.mds
-    n_mds = length(mds)
-
-    nonzero_ids_unknowns = [findall(!iszero, md[1:n_unknowns]) for md in mds]
-    nonzero_ids_params = [findall(!iszero, md[n_unknowns+1:end]) for md in mds]
-
-    evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
-    for i in 1:n_instances
-        params = view(parameters, :, i)
-        sols = view(solutions, :, :, i)
-        for (j, md) in enumerate(mds)
-            params_part = params[nonzero_ids_params[j]]
-            md_params_part = md[n_unknowns+1:end][nonzero_ids_params[j]]
-            params_eval = prod(params_part.^md_params_part)
-            sols_part = view(sols, nonzero_ids_unknowns[j], :)
-            md_sols_part = md[1:n_unknowns][nonzero_ids_unknowns[j]]
-            evaluated_mons[j, :, i] = vec(prod(sols_part.^md_sols_part, dims=1)).*params_eval
-        end
-    end
-    return evaluated_mons
-end
 
 function interpolate(
     A::AbstractMatrix{CC},
@@ -254,7 +222,7 @@ function interpolate(
 end
 
 function interpolate_vanishing_polynomials(
-    samples::VarietySamples,
+    samples::Samples,
     vars::Vector{Variable},
     mons::MonomialVector;
     tol::Float64=1e-5

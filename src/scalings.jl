@@ -5,25 +5,33 @@ export Grading,
 using AbstractAlgebra: ZZ, matrix, GF, lift, hnf, snf_with_transform 
 using LinearAlgebra: diag
 
-mutable struct Grading
-    free_part::Union{Nothing, Matrix{Int}}
-    mod_part::Vector{Tuple{Int, Matrix{Int}}}
+mutable struct Grading{Tv<:Integer,Ti<:Integer}
+    nscalings::Int
+    free_part::Union{Nothing, SparseMatrixCSC{Tv,Ti}}
+    mod_part::Vector{Tuple{Tv, SparseMatrixCSC{Tv,Ti}}}
 end
 
-Grading() = Grading(nothing, [])
+Grading{Tv,Ti}() where {Tv<:Integer,Ti<:Integer} = Grading{Tv,Ti}(0, nothing, [])
 
-function Grading(s::Vector{Int}, U::Vector{Matrix{Int}})
-    grading = Grading()
+function Grading{Tv,Ti}(
+    s::Vector{Int},
+    U::Vector{Matrix{Int}}
+) where {Tv<:Integer,Ti<:Integer}
+
+    grading = Grading{Tv,Ti}()
     for (sᵢ, Uᵢ) in zip(s, U)
         if sᵢ == 0
             grading.free_part = Uᵢ
         else
             push!(grading.mod_part, (sᵢ, Uᵢ))
         end
+        grading.nscalings += size(Uᵢ, 1)
     end
     return grading
 end
 
+nfree(grading::Grading) = isnothing(grading.free_part) ? 0 : size(grading.free_part, 1)
+nscalings(grading::Grading) = grading.nscalings
 Base.isempty(grading::Grading) = isnothing(grading.free_part) && isempty(grading.mod_part)
 Base.copy(grading::Grading) = Grading(grading.free_part, grading.mod_part)
 
@@ -50,16 +58,21 @@ end
 
 SparseAction = Vector{Tuple{Variable, Expression}}
 
-struct ScalingGroup
-    grading::Grading
+struct ScalingGroup{Tv<:Integer,Ti<:Integer}
+    grading::Grading{Tv,Ti}
     structure::String
     vars::Vector{Variable}
-    action::Tuple{Vector{SparseAction}, Vector{Tuple{Int, Vector{SparseAction}}}}
+    action::Tuple{Vector{SparseAction}, Vector{Tuple{Tv, Vector{SparseAction}}}}
 end
 
-ScalingGroup(vars::Vector{Variable}) = ScalingGroup(Grading(), "N/A", vars, ([], []))
+ScalingGroup{Tv,Ti}(
+    vars::Vector{Variable}
+) where {Tv<:Integer,Ti<:Integer} = ScalingGroup(Grading{Tv,Ti}(), "N/A", vars, ([], []))
 
-function ScalingGroup(grading::Grading, vars::Vector{Variable})
+function ScalingGroup(
+    grading::Grading{Tv,Ti},
+    vars::Vector{Variable}
+) where {Tv<:Integer,Ti<:Integer}
     free_action = Vector{SparseAction}([])
     U₀ = grading.free_part
     if !isnothing(U₀)
@@ -70,25 +83,25 @@ function ScalingGroup(grading::Grading, vars::Vector{Variable})
             @var λ[1:size(U₀, 1)]
         end
         for j in axes(U₀, 1)
-            nonzero_ids = findall(!iszero, U₀[j, :])
-            exprs = (λ[j].^U₀[j, :][nonzero_ids]).*vars[nonzero_ids]
-            push!(free_action, collect(zip(vars[nonzero_ids], exprs)))
+            nzind, nzval = findnz(U₀[j, :])
+            exprs = (λ[j].^nzval).*vars[nzind]
+            push!(free_action, collect(zip(vars[nzind], exprs)))
         end
     end
-    mod_action = Vector{Tuple{Int, Vector{SparseAction}}}([])
+    mod_action = Vector{Tuple{Tv, Vector{SparseAction}}}([])
     for (sᵢ, Uᵢ) in grading.mod_part
         sᵢ_action = Vector{SparseAction}([])
         if sᵢ == 2
             for j in axes(Uᵢ, 1)
-                nonzero_ids = findall(!iszero, Uᵢ[j, :])
-                push!(sᵢ_action, collect(zip(vars[nonzero_ids], -vars[nonzero_ids])))
+                nzind, _ = findnz(Uᵢ[j, :])
+                push!(sᵢ_action, collect(zip(vars[nzind], -vars[nzind])))
             end
         else
-            @var ω[sᵢ]
+            @var ω[Int(sᵢ)]
             for j in axes(Uᵢ, 1)
-                nonzero_ids = findall(!iszero, Uᵢ[j, :])
-                exprs = (ω[1].^Uᵢ[j, :][nonzero_ids]).*vars[nonzero_ids]
-                push!(sᵢ_action, collect(zip(vars[nonzero_ids], exprs)))
+                nzind, nzval = findnz(Uᵢ[j, :])
+                exprs = (ω[1].^nzval).*vars[nzind]
+                push!(sᵢ_action, collect(zip(vars[nzind], exprs)))
             end
         end
         push!(mod_action, (sᵢ, sᵢ_action))
@@ -155,19 +168,41 @@ function _snf_scaling_symmetries(F::System)::Tuple{Vector{Int}, Vector{Matrix{In
     return s, Us
 end
 
-function _hnf_reduce(grading::Grading)
+function _hnf_reduce!(
+    s::Vector{Int},
+    U::Vector{Matrix{Int}}
+)
+    for (i, (sᵢ, Uᵢ)) in enumerate(zip(s, U))
+        if sᵢ == 0
+            U[i] = Matrix(hnf(matrix(ZZ, Uᵢ)))
+        else
+            try
+                U[i] = Int.(lift.(Matrix(hnf(matrix(GF(sᵢ), Uᵢ)))))
+            catch
+                U[i] = mod.(Uᵢ, sᵢ)
+            end
+        end
+    end
+    return s, U
+end
+
+function _hnf_reduce(grading::Grading{Tv,Ti}) where {Tv<:Integer,Ti<:Integer}
     U₀ = grading.free_part
-    hnf_U₀ = isnothing(U₀) ? nothing : Matrix(hnf(matrix(ZZ, U₀)))
-    hnf_Uᵢs = Vector{Tuple{Int, Matrix{Int}}}([])
+    red_grading = Grading{Tv,Ti}()
+    if !isnothing(U₀)
+        red_grading.free_part = Matrix(hnf(matrix(ZZ, U₀)))
+        red_grading.nscalings = size(U₀, 1)
+    end
     for (sᵢ, Uᵢ) in grading.mod_part
         try
-            Uᵢ = Int.(lift.(Matrix(hnf(matrix(GF(sᵢ), Uᵢ)))))
+            Uᵢ = lift.(Matrix(hnf(matrix(GF(sᵢ), Uᵢ))))
         catch
             Uᵢ = mod.(Uᵢ, sᵢ)
         end
-        push!(hnf_Uᵢs, (sᵢ, Uᵢ))
+        push!(red_grading.mod_part, (sᵢ, Uᵢ))
+        red_grading.nscalings += size(Uᵢ, 1)
     end
-    return Grading(hnf_U₀, hnf_Uᵢs)
+    return red_grading
 end
 
 """
@@ -194,29 +229,31 @@ ScalingGroup isomorphic to ℤ² × ℤ₄ × ℤ₂
    a ↦ -a, x ↦ -x, y ↦ -y, z ↦ -z
 ```
 """
-function scaling_symmetries(F::System; in_hnf::Bool=true)
+function scaling_symmetries(F::System)
     vars = vcat(F.variables, F.parameters)
     s, U = _snf_scaling_symmetries(F)
-    length(s) == 0 && return ScalingGroup(vars)
-    grading = Grading(s, U)
-    in_hnf && return ScalingGroup(_hnf_reduce(grading), vars)
-    return ScalingGroup(grading, vars)
+    length(s) == 0 && return ScalingGroup{Int8, Int16}(vars)
+    _hnf_reduce!(s, U)
+    return ScalingGroup(Grading{Int8, Int16}(s, U), vars)
 end
 
-scaling_symmetries(
-    F::SampledSystem;
-    in_hnf::Bool=true
-) = scaling_symmetries(F.system; in_hnf=in_hnf)
+scaling_symmetries(F::SampledSystem) = scaling_symmetries(F.system)
 
 # TODO: extend to remove rows dependent on other blocks
-function reduce(grading::Grading)
+function reduce(grading::Grading{Tv,Ti}) where {Tv<:Integer,Ti<:Integer}
     hnf_grading = _hnf_reduce(grading)
-    red_grading = Grading()
-    U₀ = filter_rows(!iszero, hnf_grading.free_part)
-    red_grading.free_part = size(U₀, 1) == 0 ? nothing : U₀
+    red_grading = Grading{Tv,Ti}()
+    U₀ = take_rows(!iszero, hnf_grading.free_part)
+    if size(U₀, 1) != 0
+        red_grading.free_part = U₀
+        red_grading.nscalings = size(U₀, 1)
+    end
     for (sᵢ, Uᵢ) in hnf_grading.mod_part
-        Uᵢ = filter_rows(!iszero, Uᵢ)
-        size(Uᵢ, 1) != 0 && push!(red_grading.mod_part, (sᵢ, Uᵢ))
+        Uᵢ = take_rows(!iszero, Uᵢ)
+        if size(Uᵢ, 1) != 0
+            push!(red_grading.mod_part, (sᵢ, Uᵢ))
+            red_grading.nscalings += size(Uᵢ, 1)
+        end
     end
     return red_grading
 end
@@ -231,7 +268,6 @@ function restrict_scalings(scalings::ScalingGroup, var_ids::Vector{Int})
     return ScalingGroup(reduce(restr_grading), scalings.vars[var_ids])
 end
 
-# TODO: what if vars is not a subset of scalings.vars?
 function restrict_scalings(scalings::ScalingGroup, vars::Vector{Variable})
     var_ids = [findfirst(v->v==var, scalings.vars) for var in vars]
     if nothing in var_ids
@@ -249,38 +285,35 @@ scaling_symmetries(
     vars::Vector{Variable}
 ) = scaling_symmetries(F.system, vars)
 
-# TODO: extend to scalings::ScalingGroup?
-function HC.degree(md::Vector{<:Integer}, grading::Grading)
+function HC.degree(
+    mexp::SparseVector{Tv,Ti},
+    grading::Grading{Tv,Ti}
+) where {Tv<:Integer,Ti<:Integer}
+    deg = spzeros(Tv, Ti, nscalings(grading))
     U₀ = grading.free_part
-    deg_free = isnothing(U₀) ? Vector{Int}([]) : U₀*md
-    return vcat(deg_free, [mod.(Uᵢ*md, sᵢ) for (sᵢ, Uᵢ) in grading.mod_part]...)
+    if !isnothing(U₀)
+        deg[1:size(U₀,1)] = U₀*mexp
+    end
+    k = nfree(grading)
+    for (sᵢ, Uᵢ) in grading.mod_part
+        deg[(k+1):(k+size(Uᵢ,1))] = mod.(Uᵢ*mexp, sᵢ)
+        k += size(Uᵢ, 1)
+    end
+    return deg
 end
 
-HC.degree(mon::Monomial, grading::Grading) = degree(mon.md, grading)
+function to_classes(
+    mons::DenseMonomialVector{Tv,Ti},
+    grading::Grading{Tv,Ti}
+) where {Tv<:Integer,Ti<:Integer}
 
-function to_classes(mons::MonomialVector{T}, grading::Grading) where {T<:Integer}
-    classes = Dict{Vector{Int}, MonomialVector{T}}()
-    for md in mons.mds
-        deg = HC.degree(md, grading)
+    classes = Dict{SparseVector{Tv,Ti}, SparseMonomialVector{Tv,Ti}}()
+    for (uexp, pexp) in mons
+        deg = HC.degree(vcat(uexp, pexp), grading)
         if isnothing(get(classes, deg, nothing)) # the key doesn't exist
-            classes[deg] = MonomialVector{T}([md], mons.vars)
-        else
-            push!(classes[deg], md)
+            classes[deg] = SparseMonomialVector{Tv,Ti}(mons.unknowns, mons.parameters)
         end
+        push!(classes[deg], (uexp, pexp))
     end
     return classes
 end
-
-# TODO: Can we save multidegrees immediately?
-# function to_classes(mons::MonomialVector, grading::Grading)
-#     classes = Dict{Vector{Int}, Vector{Int}}()
-#     for (i, md) in enumerate(mons.mds)
-#         deg = HC.degree(md, grading)
-#         if isnothing(get(classes, deg, nothing)) # the key doesn't exist
-#             classes[deg] = [i]
-#         else
-#             push!(classes[deg], i)
-#         end
-#     end
-#     return classes
-# end

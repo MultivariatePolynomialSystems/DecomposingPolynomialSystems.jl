@@ -8,12 +8,15 @@ export @var, Variable, Expression, System
 # Exports for testing
 # export degree
 
+using SparseArrays: SparseVector, SparseMatrixCSC, spzeros, AbstractSparseVector, findnz
+using Combinatorics: partitions, multiset_permutations, combinations
 using LinearAlgebra: nullspace
+using UnPack: @unpack
 
 include("utils.jl")
-include("monomials.jl")
-include("expression_map.jl")
 include("sampled_system.jl")
+include("monomials.jl")
+# include("expression_map.jl")
 include("scalings.jl")
 # include("interpolation.jl")
 # include("deck_transformations.jl")

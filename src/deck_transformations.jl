@@ -214,7 +214,6 @@ function symmetries_fixing_parameters_graded!(
     tols::Tolerances=Tolerances(),
     logging::Bool=false
 )
-    
     n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
     C = F.deck_permutations
     symmetries = _init_symmetries(length(C), unknowns(F))
@@ -236,9 +235,9 @@ function symmetries_fixing_parameters_graded!(
                     g = gcd(vcat(num_mons, denom_mons))
                     if isone(g) && !only_param_dep(vcat(num_mons, denom_mons), Vector(1:n_unknowns))
                         if isnothing(eval_num_mons)
-                            eval_num_mons = HC.evaluate(num_mons, F.samples)
+                            eval_num_mons = evaluate(num_mons, F.samples)
                         end
-                        eval_denom_mons = HC.evaluate(denom_mons, F.samples)
+                        eval_denom_mons = evaluate(denom_mons, F.samples)
                         for (j, symmetry) in enumerate(symmetries)
                             if ismissing(symmetry[i])
                                 symmetry[i] = _interpolate_deck_function(
@@ -300,7 +299,10 @@ function symmetries_fixing_parameters_dense!(
         sample_system!(F, n_instances)
 
         logging && println("Evaluating monomials...\n")
-        evaluated_mons = HC.evaluate(mons, F.samples)
+        # TODO: pick samples at which to evaluate monomials
+        # TODO: do it according to n_mons (influences n_samples)
+        # and n_param_dep_only_mons (influences n_instances)
+        evaluated_mons = evaluate(mons, F.samples)
 
         for (i, symmetry) in enumerate(symmetries)
             logging && printstyled("Interpolating the ", i, "-th symmetry map...\n"; color=:blue)
