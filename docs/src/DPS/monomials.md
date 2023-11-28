@@ -8,6 +8,8 @@ multiexponents
 
 ## DenseMonomialVector
 
+
+
 ```@docs
 extend!
 ```
