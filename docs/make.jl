@@ -12,7 +12,7 @@ makedocs(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://multivariatepolynomialsystems.github.io/DecomposingPolynomialSystems.jl",
         edit_link="main",
-        assets=String[],
+        assets=["assets/custom.css"],
         collapselevel=1
     ),
     pages = [
