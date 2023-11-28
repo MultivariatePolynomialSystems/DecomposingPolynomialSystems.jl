@@ -450,15 +450,7 @@ function symmetries_fixing_parameters!(
 end
 
 """
-    symmetries_fixing_parameters(  # TODO: extend to take an expression map
-    F::System;
-    xp₀::Union{Nothing, NTuple{2, AbstractVector{<:Number}}}=nothing,
-    degree_bound::Integer=1,
-    param_dep::Bool=true,
-    tols::Tolerances=Tolerances(),
-    monodromy_options::Tuple=(),
-    logging::Bool=false
-)
+    symmetries_fixing_parameters(F::System; degree_bound=1, param_dep=true)
 
 Given a polynomial system F returns the group of symmetries 
 of `F` that fix the parameters. The keyword
