@@ -1,3 +1,5 @@
+push!(LOAD_PATH,"../src/")
+
 using DecomposingPolynomialSystems
 using Documenter
 
