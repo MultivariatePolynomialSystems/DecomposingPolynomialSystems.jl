@@ -473,14 +473,14 @@ DeckTransformationGroup of order 4
    x₁ ↦ x₁
    x₂ ↦ x₂
   2nd map:
-   x₁ ↦ (0.0 + 1.0*im)*x₂
-   x₂ ↦ (0.0 - 1.0*im)*x₁
+   x₁ ↦ -x₁
+   x₂ ↦ -x₂
   3rd map:
-   x₁ ↦ (-1.0 + 0.0*im)*x₁
-   x₂ ↦ (-1.0 + 0.0*im)*x₂
+   x₁ ↦ im*x₂
+   x₂ ↦ -im*x₁
   4th map:
-   x₁ ↦ (0.0 - 1.0*im)*x₂
-   x₂ ↦ (0.0 + 1.0*im)*x₁
+   x₁ ↦ -im*x₂
+   x₂ ↦ im*x₁
 ```
 """
 function symmetries_fixing_parameters(  # TODO: extend to take an expression map
