@@ -65,16 +65,5 @@
        style=" stroke:none;fill-rule:nonzero;fill:rgb(58.4%,34.5%,69.8%);fill-opacity:1;"
        d="M 485.574219 352.5 C 485.574219 413.25 436.324219 462.5 375.574219 462.5 C 314.824219 462.5 265.574219 413.25 265.574219 352.5 C 265.574219 291.75 314.824219 242.5 375.574219 242.5 C 436.324219 242.5 485.574219 291.75 485.574219 352.5 "
        id="path8" />
-    <text
-       xml:space="preserve"
-       style="font-size:8.00002px;line-height:0px;font-family:AppleMyungjo;-inkscape-font-specification:AppleMyungjo;fill:#000000;stroke:#000000;stroke-width:0.283465;stroke-linecap:round"
-       x="202.12703"
-       y="200.47838"
-       id="text10901"><tspan
-         sodipodi:role="line"
-         id="tspan10899"
-         style="stroke-width:0.283465"
-         x="202.12703"
-         y="200.47838">$x^6 + ax^4 + bx^2 + c$</tspan></text>
   </g>
 </svg>
