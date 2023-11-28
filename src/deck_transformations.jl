@@ -144,8 +144,8 @@ function _interpolate_deck_function(
     solutions::AbstractArray{T, 3},
     eval_num_mons::AbstractArray{T, 3},
     eval_denom_mons::AbstractArray{T, 3},
-    num_mons::MonomialVector,
-    denom_mons::MonomialVector,
+    num_mons::AbstractMonomialVector,
+    denom_mons::AbstractMonomialVector,
     tols::Tolerances;
     logging::Bool=false
 ) where {T<:Complex}
@@ -189,7 +189,7 @@ function _interpolate_deck_function(
     function_id::Int,
     solutions::AbstractArray{T, 3},
     eval_mons::AbstractArray{T, 3},
-    mons::MonomialVector,
+    mons::AbstractMonomialVector,
     tols::Tolerances;
     logging::Bool=false
 ) where {T<:Complex}
@@ -219,7 +219,7 @@ function symmetries_fixing_parameters_graded!(
     symmetries = _init_symmetries(length(C), unknowns(F))
 
     for d in 1:degree_bound
-        mons = MonomialVector{Int8}(scalings.vars; degree=d)
+        mons = DenseMonomialVector{Int8}(scalings.vars; degree=d)
         mon_classes = to_classes(mons, scalings.grading)
 
         max_n_mons = max(length.(collect(values(mon_classes)))...)  # size of the largest class
@@ -294,7 +294,7 @@ function symmetries_fixing_parameters_dense!(
 
     for d in 1:degree_bound
         logging && printstyled("Started interpolation for degree = ", d, "...\n"; color=:green)
-        mons = MonomialVector{Int8}(vars, degree=d)
+        mons = DenseMonomialVector{Int8}(vars, degree=d)
         n_instances = Int(ceil(2/n_sols*length(mons)))
         sample_system!(F, n_instances)
 
