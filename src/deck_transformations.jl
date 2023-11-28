@@ -450,7 +450,7 @@ function symmetries_fixing_parameters!(
 end
 
 """
-    symmetries_fixing_parameters(F::System; degree_bound=1, param_dep=true)
+    symmetries_fixing_parameters(F::System; degree_bound=1, param_dep=true, kwargs...)
 
 Given a polynomial system F returns the group of symmetries 
 of `F` that fix the parameters. The keyword

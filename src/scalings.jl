@@ -206,27 +206,26 @@ function _hnf_reduce(grading::Grading{Tv,Ti}) where {Tv<:Integer,Ti<:Integer}
 end
 
 """
-    scaling_symmetries(F::System; in_hnf=true)
+    scaling_symmetries(F::System)
 
 Given a polynomial system `F` returns the group of scaling symmetries 
-of `F`.
+of `F`. The scalings that change the parameters are considered as well.
 
 ```julia-repl
-julia> @var x y z a b;
+julia> @var x y a b c;
 
-julia> F = System([x^4 + y^2 + 1, z + a*b]);
+julia> F = System([x^4+a^2+1, y^2+b+c]; variables=[x, y], parameters=[a,b,c]);
 
 julia> scaling_symmetries(F)
-ScalingGroup isomorphic to ℤ² × ℤ₄ × ℤ₂
- 2 free scalings:
-  a ↦ a*λ₁, z ↦ z*λ₁
-  b ↦ b*λ₂, z ↦ z*λ₂
+ScalingGroup isomorphic to ℤ × ℤ₄ × ℤ₂
+ 1 free scaling:
+  y ↦ y*λ, b ↦ b*λ^2, c ↦ c*λ^2
 
  modular scalings:
   1 of order 4:
-   a ↦ a*ω₄, b ↦ b*ω₄^2, x ↦ x*ω₄^3, y ↦ y*ω₄^2, z ↦ z*ω₄^3
+   x ↦ x*ω₄^3, y ↦ y*ω₄, b ↦ b*ω₄^2, c ↦ c*ω₄^2
   1 of order 2:
-   a ↦ -a, x ↦ -x, y ↦ -y, z ↦ -z
+   x ↦ -x, y ↦ -y, a ↦ -a
 ```
 """
 function scaling_symmetries(F::System)
