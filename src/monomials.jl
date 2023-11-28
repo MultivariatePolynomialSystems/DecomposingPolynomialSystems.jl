@@ -195,15 +195,6 @@ function next_state(
     end
 end
 
-"""
-    iterate(mons::DenseMonomialVector, state::DenseMonVecState)
-
-Returns the next item (multiexponent) together with the next state. 
-The state is defined to be a tuple of (udeg, uid, pdeg, pid), where 
-`udeg` and `pdeg` are the keys for `mons.unknowns_mexps` and `mons.parameters_mexps`,
-respectively, and `uid` and `pid` are the indices in the corresponding values of 
-these dictionaries.
-"""
 function Base.iterate(
     mons::DenseMonomialVector,
     state::DenseMonVecState
@@ -213,11 +204,6 @@ function Base.iterate(
     return pick_at_state(mons, new_state), new_state
 end
 
-"""
-    iterate(mons::DenseMonomialVector)
-
-Returns the first item (multiexponent) together with the state.
-"""
 function Base.iterate(mons::DenseMonomialVector)
     state = DenseMonVecState(mons.degree, 1, 0, 1)
     return pick_at_state(mons, state), state

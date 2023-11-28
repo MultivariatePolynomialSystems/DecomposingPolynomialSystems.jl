@@ -26,8 +26,9 @@ makedocs(;
             "SymmetryGroup" => "Types/symmetry_group.md",
         ],
         "Decomposing Polynomial Systems" => [
-            "Symmetries" => "SPS/symmetries.md",
-            "Invariants" => "SPS/invariants.md",
+            "Monomials" => "DPS/monomials.md",
+            "Symmetries" => "DPS/symmetries.md",
+            "Invariants" => "DPS/invariants.md",
         ],
         "Examples from Algebraic Vision" => [
             "5-point problem" => "AV/5pp.md",
