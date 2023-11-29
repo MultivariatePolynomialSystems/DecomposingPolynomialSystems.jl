@@ -1,6 +1,25 @@
 # Introduction
-*DecomposingPolynomialSystems.jl is a Julia package for decomposing systems of polynomial equations, i.e. representing a possibly complicated polynomial system as a sequence of simpler polynomial subsystems.*
+DecomposingPolynomialSystems.jl is a Julia package for decomposing systems of polynomial equations, i.e. representing a possibly complicated polynomial system as an equivalent sequence of simpler polynomial systems.
 
-## Package Features
-- Computing symmetries that fix the parameters of the polynomial system
-- Computing invariants... 
+## Quick start
+
+TBA
+
+## Contents
+
+**SampledSystem**
+```@contents
+Pages = [
+    "sampled_system.md",
+]
+Depth = 2
+```
+
+**Computing symmetries**
+```@contents
+Pages = [
+    "symmetries/scalings.md",
+    "symmetries/deck.md",
+]
+Depth = 2
+```

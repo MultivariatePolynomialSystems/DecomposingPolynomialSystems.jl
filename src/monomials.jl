@@ -10,43 +10,43 @@ export Monomial,
     n_only_param_dep
 
 # TODO: remove?
-struct Monomial{T<:Integer,S<:Integer}
-    unkn_mexp::SparseVector{T,S}
-    param_mexp::SparseVector{T,S}
+struct Monomial{Tv<:Integer,Ti<:Integer}
+    unkn_mexp::SparseVector{Tv,Ti}
+    param_mexp::SparseVector{Tv,Ti}
     unknowns::Vector{Variable}
     parameters::Vector{Variable}
 
-    function Monomial{T,S}(
+    function Monomial{Tv,Ti}(
         unkn_mexp,
         param_mexp,
         unknowns,
         parameters
-    ) where {T,S<:Integer}
+    ) where {Tv<:Integer,Ti<:Integer}
         # TODO: check if lengths are equal, if mds contains numbers >= 0
         return new(unkn_mexp, param_mexp, unknowns, parameters)
     end
 end
 
 Monomial(
-    md::SparseVector{T,S},
+    md::SparseVector{Tv,Ti},
     vars::Vector{Variable}
-) where {T,S<:Integer} = Monomial{T,S}(md, vars)
+) where {Tv<:Integer,Ti<:Integer} = Monomial{Tv,Ti}(md, vars)
 
-function Monomial{T,S}(var::Variable, vars::Vector{Variable}) where {T,S<:Integer}
-    md = spzeros(T, S, length(vars))
+function Monomial{Tv,Ti}(var::Variable, vars::Vector{Variable}) where {Tv<:Integer,Ti<:Integer}
+    md = spzeros(Tv, Ti, length(vars))
     md[findfirst(x->x==var, vars)] = 1
-    return Monomial{T,S}(md, vars)
+    return Monomial{Tv,Ti}(md, vars)
 end
 
-function Monomial{T,S}(
+function Monomial{Tv,Ti}(
     mon::Expression,
     vars::Vector{Variable}
-) where {T,S<:Integer}
+) where {Tv<:Integer,Ti<:Integer}
     es, cs = exponents_coefficients(mon, vars)
     if length(cs) > 1 || !isone(cs[1])
         throw(ArgumentError("Input expression is not a monomial"))
     else
-        return Monomial{T,S}(sparse(es[:,1]), vars)
+        return Monomial{Tv,Ti}(sparse(es[:,1]), vars)
     end
 end
 
@@ -60,18 +60,13 @@ Base.:(==)(m₁::Monomial, m₂::Monomial) = Expression(m₁) == Expression(m₂
 Base.show(io::IO, mon::Monomial) = show(io, Expression(mon))
 
 
-"""
-    multiexponents(; degree::T, nvars::S) where {T<:Integer,S<:Integer}
-
-Generates vector of multiexponents of total degree `degree` each represented by `SparseVector{T,S}` of length `nvars`.
-"""
-function multiexponents(; degree::T, nvars::S) where {T<:Integer,S<:Integer}
-    mexps = [spzeros(T, S, nvars) for _ in 1:num_mons(nvars, degree)]
+function multiexponents(; degree::Tv, nvars::Ti) where {Tv<:Integer,Ti<:Integer}
+    mexps = [spzeros(Tv, Ti, nvars) for _ in 1:num_mons(nvars, degree)]
     k = 1
     for n in 1:nvars
-        for part::Vector{T} in partitions(degree, n)
+        for part::Vector{Tv} in partitions(degree, n)
             for vals in multiset_permutations(part, n)
-                for inds in combinations(S.(1:nvars), n)
+                for inds in combinations(Ti.(1:nvars), n)
                     mexps[k][inds] = vals
                     k += 1
                 end
@@ -85,23 +80,23 @@ abstract type AbstractMonomialVector end
 
 # Structure representing vector of monomials
 # Advantage: monomial evalution can be made more efficient
-mutable struct DenseMonomialVector{T<:Integer,S<:Integer} <: AbstractMonomialVector
-    degree::T
-    unknowns_mexps::Dict{T, Vector{SparseVector{T,S}}}  # keys are degrees
-    parameters_mexps::Dict{T, Vector{SparseVector{T,S}}}  # keys are degrees
+mutable struct DenseMonomialVector{Tv<:Integer,Ti<:Integer} <: AbstractMonomialVector
+    degree::Tv
+    unknowns_mexps::Dict{Tv, Vector{SparseVector{Tv,Ti}}}  # keys are degrees
+    parameters_mexps::Dict{Tv, Vector{SparseVector{Tv,Ti}}}  # keys are degrees
     unknowns::Vector{Variable}
     parameters::Vector{Variable}
 end
 
-function DenseMonomialVector{T,S}(;
+function DenseMonomialVector{Tv,Ti}(;
     unknowns::Vector{Variable},
     parameters::Vector{Variable}
-) where {T,S<:Integer}
+) where {Tv<:Integer,Ti<:Integer}
 
-    degree = zero(T)
-    unknowns_mexps = Dict(0 => [spzeros(T, S, length(unknowns))])
-    parameters_mexps = Dict(0 => [spzeros(T, S, length(parameters))])
-    return DenseMonomialVector{T,S}(
+    degree = zero(Tv)
+    unknowns_mexps = Dict(0 => [spzeros(Tv, Ti, length(unknowns))])
+    parameters_mexps = Dict(0 => [spzeros(Tv, Ti, length(parameters))])
+    return DenseMonomialVector{Tv,Ti}(
         degree,
         unknowns_mexps,
         parameters_mexps,
@@ -114,9 +109,9 @@ unknowns(mons::DenseMonomialVector) = mons.unknowns
 HC.parameters(mons::DenseMonomialVector) = mons.parameters
 variables(mons::DenseMonomialVector) = vcat(unknowns(mons), parameters(mons))
 
-nunknowns(mons::DenseMonomialVector{T,S}) where {T<:Integer,S<:Integer} = S(length(mons.unknowns))
-HC.nparameters(mons::DenseMonomialVector{T,S}) where {T<:Integer,S<:Integer} = S(length(mons.parameters))
-nvariables(mons::DenseMonomialVector{T,S}) where {T<:Integer,S<:Integer} = nunknowns(mons)+nparameters(mons)
+nunknowns(mons::DenseMonomialVector{Tv,Ti}) where {Tv<:Integer,Ti<:Integer} = length(mons.unknowns)
+HC.nparameters(mons::DenseMonomialVector{Tv,Ti}) where {Tv<:Integer,Ti<:Integer} = length(mons.parameters)
+nvariables(mons::DenseMonomialVector{Tv,Ti}) where {Tv<:Integer,Ti<:Integer} = nunknowns(mons)+nparameters(mons)
 
 Base.length(mons::DenseMonomialVector) = num_mons_upto(nvariables(mons), mons.degree)
 nparam_only(mons::DenseMonomialVector) = num_mons_upto(nparameters(mons), mons.degree)
@@ -143,21 +138,16 @@ function Base.show(io::IO, mons::DenseMonomialVector)
     print(io, "[", join(to_expressions(mons), ", "), "]")
 end
 
-"""
-    extend!(mons::DenseMonomialVector{T,S}; degree::Integer) where {T<:Integer,S<:Integer}
-
-Extends monomial vector `mons` by new multiexponents of total degree upto `degree`.
-"""
-function extend!(mons::DenseMonomialVector{T,S}; degree::Integer) where {T<:Integer,S<:Integer}
-    degree = convert(T, degree)
+function extend!(mons::DenseMonomialVector{Tv,Ti}; degree::Integer) where {Tv<:Integer,Ti<:Integer}
+    degree = convert(Tv, degree)
     if degree > mons.degree
-        for d::T in mons.degree+1:degree
-            mons.unknowns_mexps[d] = multiexponents(degree=d, nvars=nunknowns(mons))
-            mons.parameters_mexps[d] = multiexponents(degree=d, nvars=nparameters(mons))
+        for d::Tv in mons.degree+1:degree
+            mons.unknowns_mexps[d] = multiexponents(degree=d, nvars=Ti(nunknowns(mons)))
+            mons.parameters_mexps[d] = multiexponents(degree=d, nvars=Ti(nparameters(mons)))
         end
         mons.degree = degree
     end
-    return nothing
+    return mons
 end
 
 struct DenseMonVecState
@@ -213,9 +203,9 @@ end
 # Advantages:
 #   1) monomial evalution can be made more efficient
 #   2) we know how many param_only monomials are there (needed for picking samples for evaluation)
-struct SparseMonomialVector{T<:Integer,S<:Integer} <: AbstractMonomialVector
-    unkn_dep_mexps::NTuple{2, Vector{SparseVector{T,S}}}
-    param_only_mexps::Vector{SparseVector{T,S}}
+struct SparseMonomialVector{Tv<:Integer,Ti<:Integer} <: AbstractMonomialVector
+    unkn_dep_mexps::NTuple{2, Vector{SparseVector{Tv,Ti}}}
+    param_only_mexps::Vector{SparseVector{Tv,Ti}}
     unknowns::Vector{Variable}
     parameters::Vector{Variable}
 end
@@ -231,9 +221,9 @@ nunkn_dep(mons::SparseMonomialVector) = length(mons.unkn_dep_mexps[1])
 nparam_only(mons::SparseMonomialVector) = length(mons.param_only_mexps)
 
 function Base.push!(
-    mons::SparseMonomialVector{T,S},
-    (uexp, pexp)::NTuple{2, SparseVector{T,S}}
-) where {T<:Integer,S<:Integer}
+    mons::SparseMonomialVector{Tv,Ti},
+    (uexp, pexp)::NTuple{2, SparseVector{Tv,Ti}}
+) where {Tv<:Integer,Ti<:Integer}
 
     if iszero(uexp)
         push!(mons.param_only_mexps, pexp)
@@ -280,11 +270,11 @@ prodpow(
 ) = dropdims(prod(selectdim(v,1,e.nzind).^e.nzval; dims=1); dims=1)
 
 function HC.evaluate(
-    mexps_dict::Dict{T, Vector{SparseVector{T,S}}},
+    mexps_dict::Dict{Tv, Vector{SparseVector{Tv,Ti}}},
     samples::Array{P,N}
-) where {T, S, P, N}
+) where {Tv<:Integer, Ti<:Integer, P, N}
 
-    evals = Dict{T, Array{P,N}}()
+    evals = Dict{Tv, Array{P,N}}()
     for (d, mexps) in mexps_dict
         eval = zeros(P, length(mexps), size(samples)[2:end]...)
         for (i, mexp) in enumerate(mexps)

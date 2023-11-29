@@ -58,6 +58,11 @@ end
 
 SparseAction = Vector{Tuple{Variable, Expression}}
 
+"""
+    ScalingGroup{Tv<:Integer,Ti<:Integer}
+
+A `ScalingGroup` is the result of `scaling_symmetries` computation.
+"""
 struct ScalingGroup{Tv<:Integer,Ti<:Integer}
     grading::Grading{Tv,Ti}
     structure::String

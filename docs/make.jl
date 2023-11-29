@@ -15,26 +15,21 @@ makedocs(;
         canonical="https://multivariatepolynomialsystems.github.io/DecomposingPolynomialSystems.jl",
         edit_link="main",
         assets=["assets/custom.css"],
-        collapselevel=1
+        collapselevel=2
     ),
     pages = [
         "Introduction" => "index.md",
-        "Numerical Algebraic Geometry" => [
-            "Monodromy" => "NAG/monodromy.md",
-            "Symmetries" => "NAG/symmetries.md",
+        "SampledSystem" => "sampled_system.md",
+        "Symmetries" => [
+            "Scaling symmetries" => "symmetries/scalings.md",
+            "Deck transformations" => "symmetries/deck.md",
         ],
-        "Data Types" => [
-            "SampledSystem" => "Types/sampled_system.md",
-            "SymmetryGroup" => "Types/symmetry_group.md",
+        "Invariants" => [
+            "Invariants" => "invariants/invariants.md",
         ],
         "Decomposing Polynomial Systems" => [
-            "Monomials" => "DPS/monomials.md",
-            "Symmetries" => "DPS/symmetries.md",
-            "Invariants" => "DPS/invariants.md",
-        ],
-        "Examples from Algebraic Vision" => [
-            "5-point problem" => "AV/5pp.md",
-        ],
+            "Decompose" => "decomposition/decompose.md",
+        ]
     ],
 )
 

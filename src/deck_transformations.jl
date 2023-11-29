@@ -43,6 +43,11 @@ function Base.show(io::IO, dt::DeckTransformation)
     end
 end
 
+"""
+    DeckTransformationGroup
+
+A `DeckTransformationGroup` is the result of deck transformations computation.
+"""
 struct DeckTransformationGroup
     maps::Vector{DeckTransformation}
     group::GapObj
