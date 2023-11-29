@@ -59,9 +59,9 @@ end
 SparseAction = Vector{Tuple{Variable, Expression}}
 
 """
-    ScalingGroup{Tv<:Integer,Ti<:Integer}
+    ScalingGroup
 
-A `ScalingGroup` is the result of `scaling_symmetries` computation.
+A `ScalingGroup` is the result of the [`scaling_symmetries`](@ref) computation.
 """
 struct ScalingGroup{Tv<:Integer,Ti<:Integer}
     grading::Grading{Tv,Ti}
@@ -73,6 +73,17 @@ end
 ScalingGroup{Tv,Ti}(
     vars::Vector{Variable}
 ) where {Tv<:Integer,Ti<:Integer} = ScalingGroup(Grading{Tv,Ti}(), "N/A", vars, ([], []))
+
+function create_action(vars::Vector{Variable}, base::Union{Number, Vector{Variable}}, U::SparseMatrixCSC)
+    action = Vector{SparseAction}([[] for _ in axes(U, 1)])
+    for j in axes(U, 1)
+        nzind, nzval = findnz(U[j, :])
+        b = typeof(base) <: Number ? base : base[j]
+        exprs = (b.^nzval).*vars[nzind]
+        action[j] = collect(zip(vars[nzind], exprs))
+    end
+    return action
+end
 
 function ScalingGroup(
     grading::Grading{Tv,Ti},
@@ -87,27 +98,17 @@ function ScalingGroup(
         else
             @var λ[1:size(U₀, 1)]
         end
-        for j in axes(U₀, 1)
-            nzind, nzval = findnz(U₀[j, :])
-            exprs = (λ[j].^nzval).*vars[nzind]
-            push!(free_action, collect(zip(vars[nzind], exprs)))
-        end
+        free_action = create_action(vars, λ, U₀)
     end
     mod_action = Vector{Tuple{Tv, Vector{SparseAction}}}([])
     for (sᵢ, Uᵢ) in grading.mod_part
-        sᵢ_action = Vector{SparseAction}([])
         if sᵢ == 2
-            for j in axes(Uᵢ, 1)
-                nzind, _ = findnz(Uᵢ[j, :])
-                push!(sᵢ_action, collect(zip(vars[nzind], -vars[nzind])))
-            end
+            sᵢ_action = create_action(vars, -1, Uᵢ)
+        elseif sᵢ == 4
+            sᵢ_action = create_action(vars, im, Uᵢ)
         else
             @var ω[Int(sᵢ)]
-            for j in axes(Uᵢ, 1)
-                nzind, nzval = findnz(Uᵢ[j, :])
-                exprs = (ω[1].^nzval).*vars[nzind]
-                push!(sᵢ_action, collect(zip(vars[nzind], exprs)))
-            end
+            sᵢ_action = create_action(vars, ω[1], Uᵢ)
         end
         push!(mod_action, (sᵢ, sᵢ_action))
     end
@@ -228,7 +229,7 @@ ScalingGroup isomorphic to ℤ × ℤ₄ × ℤ₂
 
  modular scalings:
   1 of order 4:
-   x ↦ x*ω₄^3, y ↦ y*ω₄, b ↦ b*ω₄^2, c ↦ c*ω₄^2
+   x ↦ -im*x, y ↦ im*y, b ↦ -b, c ↦ -c
   1 of order 2:
    x ↦ -x, y ↦ -y, a ↦ -a
 ```

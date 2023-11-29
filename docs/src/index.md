@@ -3,7 +3,7 @@ DecomposingPolynomialSystems.jl is a Julia package for decomposing systems of po
 
 ## Quick start
 
-TBA
+TBW
 
 ## Contents
 

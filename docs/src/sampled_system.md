@@ -1,11 +1,15 @@
 # SampledSystem
 
-`SampledSystem` is a type that stores the result of monodromy computations together with the solutions-parameters samples obtained by `monodromy_solve` or further by additional tracking.
+`SampledSystem` is a struct type that initially contains a polynomial system, the result of monodromy computations, and the solutions-parameters samples obtained by monodromy or further by additional tracking. This is the return type of [`run_monodromy`](@ref) and [`sample!`](@ref).
 
 ## Run monodromy
 
-## MonodromyInfo
+```@docs
+run_monodromy
+```
 
 ## Sample system
 
-## Samples
+```@docs
+sample!
+```

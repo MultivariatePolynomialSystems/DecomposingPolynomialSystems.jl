@@ -41,6 +41,6 @@ DeckTransformationGroup of order 4
 ```
 where `im` is the imaginary unit.
 ### Computing invariants
-TBA...
+TBW
 ### Decomposition
-TBA...
+TBW

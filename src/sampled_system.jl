@@ -2,7 +2,7 @@ export SampledSystem,
     MonodromyInfo,
     Samples,
     run_monodromy,
-    sample_system!,
+    sample!,
     unknowns,
     parameters,
     variables,
@@ -19,6 +19,8 @@ export SampledSystem,
 
 using HomotopyContinuation: Result, MonodromyResult, nsolutions, ntracked
 using HomotopyContinuation: ParameterHomotopy, Tracker, track
+
+const MONODROMY_SOLVE_REF = "https://www.juliahomotopycontinuation.org/HomotopyContinuation.jl/stable/monodromy/#HomotopyContinuation.monodromy_solve"
 
 struct MonodromyInfo
     n_solutions::Int
@@ -124,8 +126,8 @@ function Base.show(io::IO, F::SampledSystem)
     end
     print(io, "\n\n")
     println(io, " number of solutions: $(nsolutions(F))")
-    println(io, " sampled instances: $(ninstances(F))")
-    print(io, " deck permutations: $(length(deck_permutations(F)))")
+    print(io, " sampled instances: $(ninstances(F))")
+    # print(io, " deck permutations: $(length(deck_permutations(F)))")
 end
 
 function random_samples(samples::Samples)
@@ -142,16 +144,37 @@ function random_samples(
     return M2VV(samples.solutions[:, path_ids, instance_id]), samples.parameters[:, instance_id]
 end
 
+
+"""
+    run_monodromy(F::Union{System, AbstractSystem}, xp₀=nothing; options...) -> SampledSystem
+
+Runs [`monodromy_solve`]($(MONODROMY_SOLVE_REF)) on a given polynomial system `F` with starting
+solutions `xp₀[1]` and parameters `xp₀[2]` (if given).
+
+```julia-repl
+julia> @var x a b;
+
+julia> F = System([x^3+a*x+b]; variables=[x], parameters=[a,b]);
+
+julia> F = run_monodromy(F, ([[1]], [1,-2]), max_loops_no_progress = 10)
+SampledSystem with 3 samples
+ 1 unknown: x
+ 2 parameters: a, b
+
+ number of solutions: 3
+ sampled instances: 1
+```
+"""
 function run_monodromy(
-    F::System,
-    xp₀::Union{Nothing, NTuple{2, AbstractVector{<:Number}}}=nothing;
+    F::Union{System, AbstractSystem},
+    xp₀::Union{Nothing, Tuple{AbstractVector{<:AbstractVector{<:Number}}, AbstractVector{<:Number}}}=nothing;
     options...
 )
     if isnothing(xp₀)
         MR = HC.monodromy_solve(F; permutations=true, options...)
     else
-        x₀, p₀ = xp₀
-        MR = HC.monodromy_solve(F, [x₀], p₀; permutations=true, options...)
+        sols, p₀ = xp₀
+        MR = HC.monodromy_solve(F, sols, ComplexF64.(p₀); permutations=true, options...)
     end
     if length(HC.solutions(MR)) == 1
         error("Only 1 solution found, no monodromy group available. Try running again...")
@@ -159,9 +182,22 @@ function run_monodromy(
     return SampledSystem(F, MR)
 end
 
-function run_monodromy(F::SampledSystem; options...)
-    xs, p = random_samples(F; path_ids=Vector(1:nsolutions(F)))
-    MR = HC.monodromy_solve(F.system, xs, p; permutations=true, options...)
+"""
+    run_monodromy(F::SampledSystem, xp₀=nothing; options...) -> SampledSystem
+
+Reruns [`monodromy_solve`]($(MONODROMY_SOLVE_REF)) on a given sampled polynomial system `F`.
+"""
+function run_monodromy(
+    F::SampledSystem,
+    xp₀::Union{Nothing, Tuple{AbstractVector{<:AbstractVector{<:Number}}, AbstractVector{<:Number}}}=nothing;
+    options...
+)
+    if isnothing(xp₀)
+        sols, p₀ = random_samples(F; path_ids=Vector(1:nsolutions(F)))
+    else
+        sols, p₀ = xp₀  # TODO: do we need this?
+    end
+    MR = HC.monodromy_solve(F.system, sols, ComplexF64.(p₀); permutations=true, options...)
     if length(HC.solutions(MR)) == 1
         error("Only 1 solution found, no monodromy group available. Try running again...")
     end
@@ -211,7 +247,12 @@ function extract_samples(
     return all_sols, all_params
 end
 
-function sample_system!(
+"""
+    sample!(F::SampledSystem; path_ids=Vector(1:nsolutions(F)), n_instances=1) -> SampledSystem
+
+TBW
+"""
+function sample!(
     F::SampledSystem;
     path_ids::Vector{Int}=Vector(1:nsolutions(F)),
     n_instances::Int=1

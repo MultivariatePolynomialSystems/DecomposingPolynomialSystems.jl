@@ -48,7 +48,7 @@
     </marker>
   </defs>
   <sodipodi:namedview
-     pagecolor="#430000"
+     pagecolor="#000000"
      bordercolor="#666666"
      borderopacity="1"
      objecttolerance="10"
@@ -57,14 +57,14 @@
      inkscape:pageopacity="0.17254902"
      inkscape:pageshadow="2"
      inkscape:window-width="1680"
-     inkscape:window-height="1050"
+     inkscape:window-height="938"
      id="namedview17"
      showgrid="false"
-     inkscape:zoom="0.94817006"
-     inkscape:cx="314.81694"
-     inkscape:cy="351.20282"
+     inkscape:zoom="2.7303733"
+     inkscape:cx="369.36342"
+     inkscape:cy="211.69267"
      inkscape:window-x="0"
-     inkscape:window-y="0"
+     inkscape:window-y="25"
      inkscape:window-maximized="0"
      inkscape:current-layer="surface763305"
      inkscape:showpageshadow="2"
@@ -177,7 +177,7 @@
     <circle
        style="fill:#ffffff;stroke:#ffffff;stroke-width:1.53925;stroke-linecap:round;stroke-miterlimit:1.8"
        id="circle21315"
-       cx="323.87305"
+       cx="324.9718"
        cy="384.39151"
        r="10.992368" />
     <circle
