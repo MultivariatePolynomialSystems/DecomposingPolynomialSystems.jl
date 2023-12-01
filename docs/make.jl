@@ -19,7 +19,7 @@ makedocs(;
     ),
     pages = [
         "Introduction" => "index.md",
-        "SampledSystem" => "sampled_system.md",
+        "Sampling Polynomial Systems" => "sampling.md",
         "Symmetries" => [
             "Scaling symmetries" => "symmetries/scalings.md",
             "Deck transformations" => "symmetries/deck.md",

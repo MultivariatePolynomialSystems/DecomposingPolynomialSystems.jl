@@ -82,17 +82,20 @@ end
 
 Base.getindex(deck::DeckTransformationGroup, inds...) = getindex(deck.maps, inds...)
 
-# TODO: extend to scalings::ScalingGroup?
-function _denom_deg(num_deg::Vector{Int}, grading::Grading, var_id::Int)
-    denom_deg = zeros(Int, length(num_deg))
+function _denom_deg(
+    num_deg::SparseVector{Tv,Ti},
+    grading::Grading{Tv,Ti},
+    var_id::Int
+) where {Tv<:Integer,Ti<:Integer}
+    denom_deg = spzeros(Tv, Ti, length(num_deg))
     U₀ = grading.free_part
     if !isnothing(U₀)
-        k = size(U₀, 1)
-        denom_deg[1:k] = num_deg[1:k] - U₀[:, var_id]
+        denom_deg[1:size(U₀,1)] = num_deg[1:size(U₀,1)] - U₀[:, var_id]
     end
+    k = nfree(grading)
     for (sᵢ, Uᵢ) in grading.mod_part
-        n_scalings = size(Uᵢ, 1)
-        denom_deg[k+1:k+n_scalings] = mod.(num_deg[k+1:k+n_scalings] - Uᵢ[:, var_id], sᵢ)
+        n_scalings = size(Uᵢ,1)
+        denom_deg[(k+1):(k+n_scalings)] = mod.(num_deg[(k+1):(k+n_scalings)] - Uᵢ[:, var_id], sᵢ)
         k += n_scalings
     end
     return denom_deg
@@ -124,16 +127,12 @@ function _deck_vandermonde_matrix(
 end
 
 function _all_interpolated(symmetries::Vector{Vector{MiExpression}})
-    all_interpolated = true
     for symmetry in symmetries
         for expr in symmetry
-            if ismissing(expr)
-                all_interpolated = false
-                break
-            end
+            ismissing(expr) && return false
         end
     end
-    return all_interpolated
+    return true
 end
 
 function _init_symmetries(n_symmetries::Int, unknowns::Vector{Variable})
@@ -290,23 +289,21 @@ function symmetries_fixing_parameters_dense!(
     tols::Tolerances=Tolerances(),
     logging::Bool=false
 )
-
-    n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
-    vars = param_dep ? variables(F) : unknowns(F)  # TODO: rename vars --> interp_vars?
-
-    C = F.deck_permutations
+    C = deck_permutations(F)
     symmetries = _init_symmetries(length(C), unknowns(F))
+    mons = DenseMonomialVector{Int8, Int16}(unknowns=unknowns(F), parameters=parameters(F))
 
     for d in 1:degree_bound
         logging && printstyled("Started interpolation for degree = ", d, "...\n"; color=:green)
-        mons = DenseMonomialVector{Int8}(vars, degree=d)
+        extend!(mons; degree=d, extend_params=param_dep)
         n_instances = Int(ceil(2/n_sols*length(mons)))
-        sample_system!(F, n_instances)
+
+        # TODO: pick path_ids and ninstances for sampling
+        # TODO: do it according to length (influences nsamples)
+        # and nparam_only (influences ninstances)
+        sample!(F, n_instances)
 
         logging && println("Evaluating monomials...\n")
-        # TODO: pick samples at which to evaluate monomials
-        # TODO: do it according to n_mons (influences n_samples)
-        # and n_param_dep_only_mons (influences n_instances)
         evaluated_mons = evaluate(mons, F.samples)
 
         for (i, symmetry) in enumerate(symmetries)

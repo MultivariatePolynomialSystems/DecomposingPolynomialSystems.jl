@@ -20,7 +20,8 @@ export SampledSystem,
 using HomotopyContinuation: Result, MonodromyResult, nsolutions, ntracked
 using HomotopyContinuation: ParameterHomotopy, Tracker, track
 
-const MONODROMY_SOLVE_REF = "https://www.juliahomotopycontinuation.org/HomotopyContinuation.jl/stable/monodromy/#HomotopyContinuation.monodromy_solve"
+const MONODROMY_SOLVE_REF = "https://www.juliahomotopycontinuation.org/HomotopyContinuation.jl/stable/monodromy/"
+const SOLVE_REF = "https://www.juliahomotopycontinuation.org/HomotopyContinuation.jl/stable/solve/"
 
 struct MonodromyInfo
     n_solutions::Int
@@ -52,28 +53,102 @@ mutable struct SampledSystem
 end
 
 unknowns(F::System) = HC.variables(F)
+
+"""
+    unknowns(F::SampledSystem) -> Vector{Variable}
+
+Returns the vector of unknowns of `F`.
+"""
 unknowns(F::SampledSystem) = unknowns(F.system)
+
+"""
+    parameters(F::SampledSystem) -> Vector{Variable}
+
+Returns the vector of parameters of `F`.
+"""
 HC.parameters(F::SampledSystem) = parameters(F.system)
+
 variables(F::System) = vcat(unknowns(F), parameters(F))  # does a different thing than HC.variables
+
+"""
+    variables(F::SampledSystem) -> Vector{Variable}
+
+Returns the concatenated vector of unknowns and parameters of `F`.
+"""
 variables(F::SampledSystem) = variables(F.system)
 
+"""
+    nunknowns(F::SampledSystem) -> Int
+
+Returns the number of unknowns of `F`.
+"""
 nunknowns(F::SampledSystem) = length(unknowns(F))  # equivalent to HC.nvariables
+
+"""
+    nparameters(F::SampledSystem) -> Int
+
+Returns the number of parameters of `F`.
+"""
 HC.nparameters(F::SampledSystem) = length(parameters(F))
+
+"""
+    nvariables(F::SampledSystem) -> Int
+
+Returns the number of variables of `F`.
+"""
 nvariables(F::SampledSystem) = length(variables(F))  # doesn't extend HC.nvariables, does a different thing
 
+"""
+    nsolutions(F::SampledSystem) -> Int
+
+Returns the number of solutions of `F` for regular parameters.
+"""
 HC.nsolutions(F::SampledSystem) = F.mon_info.n_solutions
 
+"""
+    samples(F::SampledSystem) -> Dict{Vector{Int}, Samples}
+
+Returns the dictionary of samples of a polynomial system `F`.
+"""
+samples(F::SampledSystem) = F.samples
+
+"""
+    ninstances(F::SampledSystem) -> Int
+
+Returns the number of sampled instances of `F`.
+"""
+ninstances(F::SampledSystem) = sum([ninstances(s) for s in values(samples(F))])
+
+"""
+    nsamples(F::SampledSystem) -> Int
+
+Returns the number of samples of `F`. Notice that ninstances(F)*nsolutions(F) doesn't
+have to be equal to nsamples(F).
+"""
 function nsamples(F::SampledSystem)
     return sum([nsamples(s) for s in values(samples(F))])
 end
 
-function ninstances(F::SampledSystem)
-    return sum([ninstances(s) for s in values(samples(F))])
-end
+"""
+    monodromy_permutations(F::SampledSystem) -> Vector{Vector{Int}}
 
-samples(F::SampledSystem) = F.samples
+Returns the vector of monodromy permutations of `F` obtained by [`run_monodromy`](@ref).
+"""
 monodromy_permutations(F::SampledSystem) = F.mon_info.monodromy_permutations
+
+"""
+    block_partitions(F::SampledSystem) -> Vector{Vector{Vector{Int}}}
+
+Returns the vector of all block partitions of the solutions of `F`.
+"""
 block_partitions(F::SampledSystem) = F.mon_info.block_partitions
+
+"""
+    deck_permutations(F::SampledSystem) -> Vector{Vector{Int}}
+
+Returns the vector of deck permutations of the solutions (actions of deck transformations
+on the solutions) of `F`.
+"""
 deck_permutations(F::SampledSystem) = F.mon_info.deck_permutations
 
 (F::SampledSystem)(
@@ -156,7 +231,7 @@ julia> @var x a b;
 
 julia> F = System([x^3+a*x+b]; variables=[x], parameters=[a,b]);
 
-julia> F = run_monodromy(F, ([[1]], [1,-2]), max_loops_no_progress = 10)
+julia> F = run_monodromy(F, ([[1]], [1,-2]); max_loops_no_progress = 10)
 SampledSystem with 3 samples
  1 unknown: x
  2 parameters: a, b
@@ -250,7 +325,8 @@ end
 """
     sample!(F::SampledSystem; path_ids=Vector(1:nsolutions(F)), n_instances=1) -> SampledSystem
 
-TBW
+Uses [`solve`]($(SOLVE_REF)) method to track the solutions of a poynomial system `F` with ids
+defined by `path_ids` to `n_instances` random parameters.
 """
 function sample!(
     F::SampledSystem;

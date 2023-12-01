@@ -7,10 +7,9 @@ TBW
 
 ## Contents
 
-**SampledSystem**
 ```@contents
 Pages = [
-    "sampled_system.md",
+    "sampling.md",
 ]
 Depth = 2
 ```

@@ -19,6 +19,8 @@ xx(v) = [0 -v[3] v[2]; v[3] 0 -v[1]; -v[2] v[1] 0]
 xx2v(xx) = [-xx[2,3], xx[1,3], -xx[1,2]]
 eye(T, n::Integer) = Matrix{T}(I(n))
 
+prodpow(v::AbstractVector, e::AbstractSparseVector) = prod(v[e.nzind].^e.nzval)
+
 num_mons(n::Integer, d::Integer) = n > 0 ? binomial(Int(n - 1 + d), Int(d)) : 0
 num_mons_upto(n::Integer, d::Integer) = n > 0 ? binomial(Int(n + d), Int(d)) : 0
 
