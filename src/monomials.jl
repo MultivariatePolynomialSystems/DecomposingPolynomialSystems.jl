@@ -7,8 +7,8 @@ export multiexponents,
     evaluate,
     to_expressions,
     to_classes,
-    only_param_dep,
-    n_only_param_dep
+    nparam_only,
+    nunkn_dep
 
 function multiexponents(; degree::Tv, nvars::Ti) where {Tv<:Integer,Ti<:Integer}
     mexps = [spzeros(Tv, Ti, nvars) for _ in 1:num_mons(nvars, degree)]
@@ -32,7 +32,7 @@ abstract type AbstractMonomialVector end
 # Advantage: monomial evalution can be made more efficient
 mutable struct DenseMonomialVector{Tv<:Integer,Ti<:Integer} <: AbstractMonomialVector
     degree::Tv
-    n::Int
+    n::Int  # length
     unknowns_mexps::Dict{Tv, Vector{SparseVector{Tv,Ti}}}  # keys are degrees
     parameters_mexps::Dict{Tv, Vector{SparseVector{Tv,Ti}}}  # keys are degrees
     unknowns::Vector{Variable}
@@ -152,7 +152,7 @@ function next_state(
     elseif pdeg > 0
         return DenseMonVecState(udeg, 1, pdeg-1, 1)
     elseif udeg > 0
-        return DenseMonVecState(udeg-1, 1, min(mons.degree-udeg+1, max(keys(pexps)...)), 1)
+        return DenseMonVecState(udeg-1, 1, min(mons.degree-udeg+1, parameters_deg(mons)), 1)
     else
         return nothing
     end
@@ -188,10 +188,85 @@ SparseMonomialVector{Tv,Ti}(
     parameters::Vector{Variable}
 ) where {Tv<:Integer,Ti<:Integer} = SparseMonomialVector{Tv,Ti}(([], []), [], unknowns, parameters)
 
+struct SparseMonVecState
+    unkn_dep::Bool
+    id::Int
+end
+
+function pick_at_state(mons::SparseMonomialVector{Tv,Ti}, state::SparseMonVecState) where {Tv<:Integer,Ti<:Integer}
+    state.unkn_dep && return vcat(mons.unkn_dep_mexps[1][state.id], mons.unkn_dep_mexps[2][state.id])
+    return vcat(spzeros(Tv,Ti,nunknowns(mons)), mons.param_only_mexps[state.id])
+end
+
+function Base.iterate(mons::SparseMonomialVector)
+    length(mons) == 0 && return nothing
+    unkn_dep = mons.unkn_dep_mexps
+    if length(unkn_dep[1]) != 0
+        state = SparseMonVecState(true, 1)
+        return pick_at_state(mons, state), state
+    else
+        state = SparseMonVecState(false, 1)
+        return pick_at_state(mons, state), state
+    end
+end
+
+function next_state(
+    mons::SparseMonomialVector,
+    state::SparseMonVecState
+)
+    @unpack unkn_dep, id = state
+    if unkn_dep
+        if id < length(mons.unkn_dep_mexps[1])
+            return SparseMonVecState(true, id+1)
+        else
+            if length(mons.param_only_mexps) != 0
+                return SparseMonVecState(false, 1)
+            else
+                return nothing
+            end
+        end
+    else
+        if id < length(mons.param_only_mexps)
+            return SparseMonVecState(true, id+1)
+        else
+            return nothing
+        end
+    end
+end
+
+function Base.iterate(
+    mons::SparseMonomialVector,
+    state::SparseMonVecState
+)
+    new_state = next_state(mons, state)
+    isnothing(new_state) && return nothing
+    return pick_at_state(mons, new_state), new_state
+end
+
+function Base.findfirst(mexp::SparseVector{Tv,Ti}, mons::SparseMonomialVector{Tv,Ti}) where {Tv<:Integer,Ti<:Integer}
+    for (i, mon) in enumerate(mons)
+        mexp == mon && return i
+    end
+    return nothing
+end
+
+unknowns(mons::SparseMonomialVector) = mons.unknowns
+HC.parameters(mons::SparseMonomialVector) = mons.parameters
+variables(mons::SparseMonomialVector) = vcat(unknowns(mons), parameters(mons))
+nunknowns(mons::SparseMonomialVector) = length(mons.unknowns)
 Base.length(mons::SparseMonomialVector) = length(mons.unkn_dep_mexps[1]) + length(mons.param_only_mexps)
 is_param_only(mons::SparseMonomialVector) = length(mons.unkn_dep_mexps[1]) == 0
 nunkn_dep(mons::SparseMonomialVector) = length(mons.unkn_dep_mexps[1])
 nparam_only(mons::SparseMonomialVector) = length(mons.param_only_mexps)
+
+function Base.vcat(monVs::SparseMonomialVector{Tv,Ti}...) where {Tv<:Integer,Ti<:Integer}
+    return SparseMonomialVector{Tv,Ti}(
+        (vcat([mons.unkn_dep_mexps[1] for mons in monVs]...), vcat([mons.unkn_dep_mexps[2] for mons in monVs]...)),
+        vcat([mons.param_only_mexps for mons in monVs]...),
+        monVs[1].unknowns,
+        monVs[1].parameters
+    )
+end
 
 function Base.push!(
     mons::SparseMonomialVector{Tv,Ti},
@@ -224,22 +299,29 @@ function Base.show(io::IO, mons::SparseMonomialVector)
     print(io, "[", join(to_expressions(mons), ", "), "]")
 end
 
-function Base.gcd(mons::SparseMonomialVector)
-    return Monomial(
-        min.(mons.unkn_dep_mexps[1]...),
-        min.(mons.unkn_dep_mexps[2]..., mons.param_only_mexps...),
-        mons.unknowns,
-        mons.parameters
+function Base.gcd(mons::SparseMonomialVector{Tv,Ti}) where {Tv<:Integer,Ti<:Integer}
+    if nparam_only(mons) == 0
+        return vcat(
+            min.(mons.unkn_dep_mexps[1]...),
+            min.(mons.unkn_dep_mexps[2]...)
+        )
+    end
+    return vcat(
+        min.(mons.unkn_dep_mexps[1]..., spzeros(Tv, Ti, nunknowns(mons))),
+        min.(mons.unkn_dep_mexps[2]..., mons.param_only_mexps...)
     )
 end
 
 # Structure for evaluated monomials
 # Advatage: requires less memory (no need to duplicate values for param_only monomials)
-struct EvaluatedMonomials{T <: AbstractMonomialVector}
+struct EvaluatedMonomials
     unkn_dep::Array{ComplexF64, 3}
     param_only::Array{ComplexF64, 2}
-    mons::T
 end
+
+nunkn_dep(eval_mons::EvaluatedMonomials) = size(eval_mons.unkn_dep, 1)
+nparam_only(eval_mons::EvaluatedMonomials) = size(eval_mons.param_only, 1)
+nmonomials(eval_mons::EvaluatedMonomials) = nunkn_dep(eval_mons) + nparam_only(eval_mons)
 
 # TODO: test timings w/ and w/o selectdim
 prodpow(
@@ -272,9 +354,9 @@ function HC.evaluate(
     unkn_dep = zeros(ComplexF64, nunkn_dep(mons), nsolutions(samples), ninstances(samples))
     param_only = zeros(ComplexF64, nparam_only(mons), ninstances(samples))
     k = 0
-    for udeg in mons.degree:-1:1
+    for udeg in unknowns_deg(mons):-1:1
         unkn_eval = unkn_evals[udeg]
-        for pdeg in (mons.degree-udeg):-1:0
+        for pdeg in min(mons.degree-udeg, parameters_deg(mons)):-1:0
             param_eval = param_evals[pdeg]
             for pid in axes(param_eval, 1)
                 unkn_dep[(k+1):(k+size(unkn_eval, 1)), :, :] = unkn_eval.*reshape(param_eval[pid, :], 1, 1, :)
@@ -282,8 +364,8 @@ function HC.evaluate(
             end
         end
     end
-    param_only = vcat([param_evals[pdeg] for pdeg in mons.degree:-1:0]...)
-    return EvaluatedMonomials(unkn_dep, param_only, mons)
+    param_only = vcat([param_evals[pdeg] for pdeg in parameters_deg(mons):-1:0]...)  # TODO: replace vcat?
+    return EvaluatedMonomials(unkn_dep, param_only)
 end
 
 function HC.evaluate(
@@ -294,14 +376,14 @@ function HC.evaluate(
     for (i, mexp) in enumerate(mons.param_only_mexps)
         param_only[i, :] = prodpow(samples.parameters, mexp)
     end
-    unkn_dep = zeros(ComplexF64, nmixed(mons), nsolutions(samples), ninstances(samples))
+    unkn_dep = zeros(ComplexF64, nunkn_dep(mons), nsolutions(samples), ninstances(samples))
     for (i, (uexp, pexp)) in enumerate(zip(mons.unkn_dep_mexps...))
-        unkn_dep[i, :, :] = prodpow(samples.solutions, uexp).*prodpow(samples.parameters, pexp)'
+        unkn_dep[i, :, :] = prodpow(samples.solutions, uexp).*transpose(prodpow(samples.parameters, pexp))
     end
-    return EvaluatedMonomials(unkn_dep, param_only, mons)
+    return EvaluatedMonomials(unkn_dep, param_only)
 end
 
 HC.evaluate(
     mons::AbstractMonomialVector,
-    samples::Dict{Vector{Int}, Samples}
-) = Dict(zip(keys(samples), [evaluate(mons, s) for (_, s) in samples]))
+    samples::Dict{T, Samples}
+) where {T} = Dict(zip(values(samples), [evaluate(mons, s) for s in values(samples)]))

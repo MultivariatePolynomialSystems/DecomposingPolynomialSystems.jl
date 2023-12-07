@@ -6,7 +6,9 @@ export Tolerances,
     symmetries_fixing_parameters!,
     symmetries_fixing_parameters,
     _deck_action, _deck_commutes_with_scaling,
-    _scalings_commuting_with_deck
+    _scalings_commuting_with_deck,
+    _sample_for_deck_computation!,
+    _deck_vandermonde_matrix
 
 @kwdef struct Tolerances
     nullspace_atol::Float64=0
@@ -64,7 +66,7 @@ function DeckTransformationGroup(
     F::SampledSystem
 )
     action = [DeckTransformation(symmetry, unknowns(F), parameters(F)) for symmetry in symmetries]
-    return DeckTransformationGroup(action, to_group(F.deck_permutations), F)
+    return DeckTransformationGroup(action, to_group(deck_permutations(F)), F)
 end
 
 function Base.show(io::IO, deck::DeckTransformationGroup)
@@ -101,27 +103,92 @@ function _denom_deg(
     return denom_deg
 end
 
+function to_nconstraints_ninstances(
+    path_ids::Dict{Vector{Int}, Vector{Int}},
+    samples::Dict{Vector{Int}, Samples}
+)
+    c_i_dict = Dict{Vector{Int}, NTuple{2, Int}}()
+    for key in keys(path_ids)
+        c_i_dict[key] = (length(path_ids[key]), ninstances(samples[key]))
+    end
+    return c_i_dict
+end
+
+function total_nconst_ninst(
+    c_i_dict::Dict{Vector{Int}, NTuple{2, Int}}
+)
+    cₜ, iₜ = 0, 0
+    for (c, i) in values(c_i_dict)
+        cₜ += c*i
+        iₜ += i
+    end
+    return cₜ, iₜ
+end
+
+function pick_nconstraints_ninstances(
+    c_i_dict::Dict{Vector{Int}, NTuple{2, Int}},
+    cₘᵢₙ::Int,
+    iₘᵢₙ::Int
+)
+    picked_c_i = Dict{Vector{Int}, NTuple{2, Int}}()
+    cₜ, iₜ = total_nconst_ninst(c_i_dict)
+    for (key, (cₖ, iₖ)) in c_i_dict
+        cₜ, iₜ = cₜ - cₖ*iₖ, iₜ - iₖ
+        Δc, Δi = cₘᵢₙ - cₜ, iₘᵢₙ - iₜ
+        if Δc ≤ 0 && Δi ≤ 0
+            picked_c_i[key] = (0, 0)
+            continue
+        end
+        i = max(Δi, div(Δc, cₖ, RoundUp))
+        i > iₖ && error("Not enough instances or constraints")
+        c = max(div(Δc, i, RoundUp), 1)
+        c > cₖ && error("Not enough instantces or constraints")
+        picked_c_i[key] = (c, i)
+        cₘᵢₙ, iₘᵢₙ = cₘᵢₙ - c*i, iₘᵢₙ - i
+    end
+    return picked_c_i
+end
+
 function _deck_vandermonde_matrix(
     deck_permutation::Vector{Int},
     function_id::Int,
-    solutions::AbstractArray{ComplexF64, 3},
-    eval_num_mons::AbstractArray{ComplexF64, 3},
-    eval_denom_mons::AbstractArray{ComplexF64, 3}
+    samples::Dict{Vector{Int}, Samples},
+    path_ids_for_deck::Dict{Vector{Int}, Vector{Int}},
+    eval_num_mons::Dict{Samples, EvaluatedMonomials},
+    eval_denom_mons::Dict{Samples, EvaluatedMonomials},
+    min_nconstraints::Int,
+    min_ninstances::Int
 )
-    _, n_sols, n_instances = size(solutions)
-    n_num_mons = size(eval_num_mons, 1)
-    n_denom_mons = size(eval_denom_mons, 1)
-
-    # TODO: make n_rows close to n_cols by randomly picking solution ids
-    # TODO: sol_ids = rand(1:nsols, Int(ceil((n_num_mons+n_denom_mons)/n_instances)))
-    A = zeros(ComplexF64, n_instances*n_sols, n_num_mons+n_denom_mons)
+    n_num_mons = nmonomials(first(values(eval_num_mons)))
+    n_denom_mons = nmonomials(first(values(eval_denom_mons)))
+    n_mons = n_num_mons + n_denom_mons
+    c_i_dict = to_nconstraints_ninstances(path_ids_for_deck, samples)
+    picked_c_i = pick_nconstraints_ninstances(c_i_dict, min_nconstraints, min_ninstances)
+    ntotal_constraints, _ = total_nconst_ninst(picked_c_i)
+    A = zeros(ComplexF64, ntotal_constraints, n_mons)
     @assert size(A, 1) >= size(A, 2)
 
-    for i in 1:n_sols
-        v = solutions[function_id, deck_permutation[i], :]
-        rows = ((i-1)*n_instances+1):(i*n_instances)
-        A[rows, 1:n_num_mons] = transpose(eval_num_mons[:, i, :])
-        A[rows, (n_num_mons+1):end] = -transpose(eval_denom_mons[:, i, :]).*v
+    row_offset = 0
+    for (sampled_path_ids, samplesₖ) in samples
+        n_constraints, n_instances = picked_c_i[sampled_path_ids]
+        n_constraints == 0 && continue
+
+        sols = samplesₖ.solutions
+        ids_rel = Dict(zip(sampled_path_ids, 1:length(sampled_path_ids)))
+        deck_path_ids = path_ids_for_deck[sampled_path_ids]
+        eval_num = eval_num_mons[samplesₖ]
+        eval_denom = eval_denom_mons[samplesₖ]
+        
+        for i in 1:n_constraints
+            path_id = deck_path_ids[i]  # length(deck_path_ids) ≤ n_constraints always
+            deck_values = sols[function_id, ids_rel[deck_permutation[path_id]], 1:n_instances]
+            rows = (row_offset+1):(row_offset+n_instances)
+            A[rows, 1:nunkn_dep(eval_num)] = transpose(eval_num.unkn_dep[:, ids_rel[path_id], 1:n_instances])
+            A[rows, (nunkn_dep(eval_num)+1):n_num_mons] = transpose(eval_num.param_only[:, 1:n_instances])
+            A[rows, (n_num_mons+1):(n_num_mons+nunkn_dep(eval_denom))] = -transpose(eval_denom.unkn_dep[:, ids_rel[path_id], 1:n_instances]).*deck_values
+            A[rows, (n_num_mons+nunkn_dep(eval_denom)+1):end] = -transpose(eval_denom.param_only[:, 1:n_instances]).*deck_values
+            row_offset += n_instances
+        end
     end
     return A
 end
@@ -145,25 +212,31 @@ end
 function _interpolate_deck_function(
     deck_permutation::Vector{Int},
     function_id::Int,
-    solutions::AbstractArray{T, 3},
-    eval_num_mons::AbstractArray{T, 3},
-    eval_denom_mons::AbstractArray{T, 3},
+    samples::Dict{Vector{Int}, Samples},
+    path_ids_for_deck::Dict{Vector{Int}, Vector{Int}},
+    eval_num_mons::Dict{Samples, EvaluatedMonomials},
+    eval_denom_mons::Dict{Samples, EvaluatedMonomials},
     num_mons::AbstractMonomialVector,
     denom_mons::AbstractMonomialVector,
     tols::Tolerances;
     logging::Bool=false
-) where {T<:Complex}
+)
 
-    logging && println(
-        "Creating vandermonde matrix of size ",
-        (prod([size(solutions,2), size(solutions,3)]), length(num_mons)+length(denom_mons))
-    )
+    min_nconstraints = length(num_mons) + length(denom_mons) + 2  # TODO: x^2 + ax + b example requires (+1)
+    min_ninstances = nparam_only(num_mons) + nparam_only(denom_mons)  # TODO: understand
     A = _deck_vandermonde_matrix(
         deck_permutation,
         function_id,
-        solutions,
+        samples,
+        path_ids_for_deck,
         eval_num_mons,
-        eval_denom_mons
+        eval_denom_mons,
+        min_nconstraints,
+        min_ninstances
+    )
+    logging && println(
+        "Created vandermonde matrix of size ",
+        size(A)
     )
 
     logging && println("Computing nullspace...")
@@ -191,17 +264,19 @@ end
 function _interpolate_deck_function(
     deck_permutation::Vector{Int},
     function_id::Int,
-    solutions::AbstractArray{T, 3},
-    eval_mons::AbstractArray{T, 3},
+    samples::Dict{Vector{Int}, Samples},
+    path_ids_for_deck::Dict{Vector{Int}, Vector{Int}},
+    eval_mons::Dict{Samples, EvaluatedMonomials},
     mons::AbstractMonomialVector,
     tols::Tolerances;
     logging::Bool=false
-) where {T<:Complex}
+)
 
     return _interpolate_deck_function(
         deck_permutation,
         function_id,
-        solutions,
+        samples,
+        path_ids_for_deck,
         eval_mons,
         eval_mons,
         mons,
@@ -211,43 +286,117 @@ function _interpolate_deck_function(
     )
 end
 
+function orbit(deck_permutations::Vector{Vector{Int}}, el)
+    return unique(vcat([perm[el] for perm in deck_permutations]...))
+end
+
+function path_ids_for_deck_computation(F::SampledSystem)
+    path_ids_all_deck = [Dict{Vector{Int}, Vector{Int}}() for _ in deck_permutations(F)]
+    for (i, deck) in enumerate(deck_permutations(F))
+        path_ids_deck = path_ids_all_deck[i]
+        for path_ids_samples in keys(samples(F))
+            if length(path_ids_samples) == nsolutions(F)
+                path_ids_deck[path_ids_samples] = path_ids_samples
+            else
+                path_ids_deck[path_ids_samples] = []
+                for path_id in path_ids_samples
+                    if deck[path_id] in path_ids_samples
+                        push!(path_ids_deck[path_ids_samples], path_id)
+                    end
+                end
+            end
+        end
+    end
+    return path_ids_all_deck
+end
+
+function min_nconstraints_among_deck(
+    path_ids_all_deck::Vector{Dict{Vector{Int}, Vector{Int}}},
+    samples::Dict{Vector{Int}, Samples}
+)
+    return min([sum(length(path_ids_deck)*ninstances(samples[path_ids_samples]) for (path_ids_samples, path_ids_deck) in path_ids_all_deck[i]) for i in 1:length(path_ids_all_deck)]...)
+end
+
+function _sample_for_deck_computation!(
+    F::SampledSystem;
+    min_nconstraints::Int,
+    min_ninstances::Int
+)
+    path_ids_all_deck = path_ids_for_deck_computation(F)
+    min_nconst = min_nconstraints_among_deck(path_ids_all_deck, samples(F))
+
+    Δ_ninstances = min_ninstances - ninstances(F)
+    Δ_min_nconst = min_nconstraints - min_nconst
+
+    n_sols = nsolutions(F)
+
+    if Δ_ninstances > 0
+        if Δ_min_nconst > 0
+            sample!(F; n_instances=div(Δ_min_nconst, n_sols))
+            Δ_ninstances -= div(Δ_min_nconst, n_sols)
+            if Δ_ninstances > 0
+                path_ids = orbit(deck_permutations(F), 1:max(div(mod(Δ_min_nconst, n_sols), Δ_ninstances, RoundUp), 1))
+                sample!(F, path_ids=path_ids, n_instances=Δ_ninstances)
+            else
+                sample!(F; path_ids=orbit(deck_permutations(F), 1:mod(Δ_min_nconst, n_sols)), n_instances=1)
+            end
+        else
+            sample!(F; path_ids=orbit(deck_permutations(F), 1), n_instances=Δ_ninstances)
+        end
+    else
+        if Δ_min_nconst > 0
+            sample!(F; n_instances=div(Δ_min_nconst, n_sols))
+            sample!(F; path_ids=orbit(deck_permutations(F), 1:mod(Δ_min_nconst, n_sols)), n_instances=1)
+        end
+    end
+    return path_ids_for_deck_computation(F)
+end
+
 function symmetries_fixing_parameters_graded!(
     F::SampledSystem,
-    scalings::ScalingGroup;
+    grading::Grading;
     degree_bound::Integer=1,
+    param_dep::Bool=true,
     tols::Tolerances=Tolerances(),
     logging::Bool=false
 )
-    n_unknowns, n_sols, _ = size(F.samples.solutions)  # TODO: what if n_sols is huge?
-    C = F.deck_permutations
+    C = deck_permutations(F)
     symmetries = _init_symmetries(length(C), unknowns(F))
+    mons = DenseMonomialVector{Int8, Int16}(unknowns=unknowns(F), parameters=parameters(F))
 
     for d in 1:degree_bound
-        mons = DenseMonomialVector{Int8}(scalings.vars; degree=d)
-        mon_classes = to_classes(mons, scalings.grading)
+        extend!(mons; degree=d, extend_params=param_dep)
+        mon_classes = to_classes(mons, grading)
 
-        max_n_mons = max(length.(collect(values(mon_classes)))...)  # size of the largest class
-        n_instances = Int(ceil(2/n_sols*max_n_mons))
-        sample_system!(F, n_instances)
+        mon_classes_vect = collect(values(mon_classes))
+        max_n_mons = max(length.(mon_classes_vect)...)
+        max_nparam_only = max(nparam_only.(mon_classes_vect)...)
+
+        path_ids_for_deck = _sample_for_deck_computation!(
+            F;
+            min_nconstraints = 3*max_n_mons+1,  # TODO: understand this
+            min_ninstances = 4*max_nparam_only  # TODO: understand this
+        )
         
         for (num_deg, num_mons) in mon_classes
             eval_num_mons = nothing
-            for i in 1:n_unknowns
-                denom_deg = _denom_deg(num_deg, scalings.grading, i)  # i-th variable
+            for i in 1:nunknowns(F)
+                denom_deg = _denom_deg(num_deg, grading, i)  # i-th variable
                 denom_mons = get(mon_classes, denom_deg, nothing)
                 if !isnothing(denom_mons)
-                    g = gcd(vcat(num_mons, denom_mons))
-                    if isone(g) && !only_param_dep(vcat(num_mons, denom_mons), Vector(1:n_unknowns))
+                    num_denom_mons = vcat(num_mons, denom_mons)
+                    if iszero(gcd(num_denom_mons)) && !is_param_only(num_denom_mons)
                         if isnothing(eval_num_mons)
-                            eval_num_mons = evaluate(num_mons, F.samples)
+                            eval_num_mons = evaluate(num_mons, samples(F))
                         end
-                        eval_denom_mons = evaluate(denom_mons, F.samples)
+                        eval_denom_mons = evaluate(denom_mons, samples(F))
                         for (j, symmetry) in enumerate(symmetries)
                             if ismissing(symmetry[i])
                                 symmetry[i] = _interpolate_deck_function(
                                     C[j],
                                     i,
-                                    F.samples.solutions,
+                                    samples(F),
+                                    path_ids_for_deck[j],
                                     eval_num_mons,
                                     eval_denom_mons,
                                     num_mons,
@@ -295,25 +444,27 @@ function symmetries_fixing_parameters_dense!(
 
     for d in 1:degree_bound
         logging && printstyled("Started interpolation for degree = ", d, "...\n"; color=:green)
+        
         extend!(mons; degree=d, extend_params=param_dep)
-        n_instances = Int(ceil(2/n_sols*length(mons)))
-
-        # TODO: pick path_ids and ninstances for sampling
-        # TODO: do it according to length (influences nsamples)
-        # and nparam_only (influences ninstances)
-        sample!(F, n_instances)
+        path_ids_for_deck = _sample_for_deck_computation!(
+            F;
+            min_nconstraints = 2*length(mons)+1,  # TODO: understand this
+            min_ninstances = 2*nparam_only(mons)  # TODO: understand this
+        )
 
         logging && println("Evaluating monomials...\n")
-        evaluated_mons = evaluate(mons, F.samples)
+        # TODO: pick samples for evaluation
+        evaluated_mons = evaluate(mons, samples(F))
 
         for (i, symmetry) in enumerate(symmetries)
-            logging && printstyled("Interpolating the ", i, "-th symmetry map...\n"; color=:blue)
-            for j in 1:n_unknowns
+            logging && printstyled("Interpolating the ", i, "-th deck transformation...\n"; color=:blue)
+            for j in 1:nunknowns(F)
                 if ismissing(symmetry[j])
                     symmetry[j] = _interpolate_deck_function(
                         C[i],
                         j,
-                        F.samples.solutions,
+                        samples(F),
+                        path_ids_for_deck[i],
                         evaluated_mons,
                         mons,
                         tols;
@@ -323,7 +474,7 @@ function symmetries_fixing_parameters_dense!(
                         printstyled(
                             "Good representative for the ",
                             i,
-                            "-th symmetry, variable ",
+                            "-th deck transformation, variable ",
                             unknowns(F)[j],
                             ":\n";
                             color=:red
@@ -335,7 +486,7 @@ function symmetries_fixing_parameters_dense!(
         end
     
         if _all_interpolated(symmetries)
-            logging && printstyled("--- All symmetries are interpolated ---\n"; color=:blue)
+            logging && printstyled("--- All deck transformations are interpolated ---\n"; color=:blue)
             return DeckTransformationGroup(symmetries, F)
         end
     end
@@ -400,7 +551,7 @@ end
 
 function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingGroup)
     grading = scalings.grading
-    final_grading = Grading(grading.free_part, [])
+    final_grading = Grading(nfree(grading), grading.free_part, [])
     for (sᵢ, Uᵢ) in grading.mod_part
         Vᵢ = Array{Int}(undef, 0, size(Uᵢ, 2))
         # TODO: Uᵢ ↦ all linear combinations of rows of Uᵢ (might not commute with 2 gens, but commutes with their combination)
@@ -505,3 +656,134 @@ function symmetries_fixing_parameters(  # TODO: extend to take an expression map
     )
 end
 
+# ----------------------- DEBUGGING TOOLS -----------------------
+export deck_vandermonde_dense,
+    deck_vandermonde_graded,
+    to_multiexponent,
+    reduced_nullspace,
+    to_coefficients
+
+function reduced_nullspace(A::AbstractMatrix{<:Number}; tols::Tolerances=Tolerances())
+    if tols.nullspace_rtol == 0
+        N = nullspace(A, atol=tols.nullspace_atol)
+    else
+        N = nullspace(A, atol=tols.nullspace_atol, rtol=tols.nullspace_rtol)
+    end
+    N = transpose(N)
+    size(N, 1) == 0 && return N
+    N = rref(N, tols.rref_tol)
+    sparsify!(N, tols.sparsify_tol; digits=1)
+    return N
+end
+
+function deck_vandermonde_dense(
+    F::SampledSystem;
+    deck_id::Int,
+    var::Variable,
+    degree::Integer=1,
+    param_dep::Bool=true,
+    min_nconstraints::Function=mons->2*length(mons),
+    min_ninstances::Function=mons->2*nparam_only(mons)
+)
+    mons = DenseMonomialVector{Int8, Int16}(unknowns=unknowns(F), parameters=parameters(F))
+    extend!(mons; degree=degree, extend_params=param_dep)
+    path_ids_for_deck = _sample_for_deck_computation!(
+        F;
+        min_nconstraints = min_nconstraints(mons),
+        min_ninstances = min_ninstances(mons)
+    )
+    eval_mons = evaluate(mons, samples(F))
+    function_id = findfirst(x->x==var, unknowns(F))
+    return _deck_vandermonde_matrix(
+        deck_permutations(F)[deck_id],
+        function_id,
+        samples(F),
+        path_ids_for_deck[deck_id],
+        eval_mons,
+        eval_mons,
+        min_nconstraints(mons),
+        min_ninstances(mons)
+    ), mons
+end
+
+function to_multiexponent(mon::Expression, vars::Vector{Variable})
+    es, cs = exponents_coefficients(mon, vars)
+    if length(cs) > 1 || !isone(cs[1])
+        throw(ArgumentError("Input expression is not a monomial"))
+    else
+        return SparseVector{Int8,Int16}(sparse(es[:,1]))
+    end
+end
+
+function deck_vandermonde_graded(
+    F::SampledSystem,
+    grading::Grading;
+    deck_id::Int,
+    var::Variable,
+    deg::Integer=1,
+    param_dep::Bool=true,
+    num_mon::Expression,
+    min_nconstraints::Function=(num_mons, denom_mons)->length(num_mons)+length(denom_mons)+2,
+    min_ninstances::Function=(num_mons, denom_mons)->nparam_only(num_mons)+nparam_only(denom_mons)
+)
+    mons = DenseMonomialVector{Int8, Int16}(unknowns=unknowns(F), parameters=parameters(F))
+    extend!(mons; degree=deg, extend_params=param_dep)
+    mon_classes = to_classes(mons, grading)
+
+    var_id = findfirst(x->x==var, variables(F))
+
+    mexp = to_multiexponent(num_mon, variables(F))
+    num_deg = degree(mexp, grading)
+    num_mons = mon_classes[num_deg]
+    denom_deg = _denom_deg(num_deg, grading, var_id)
+    denom_mons = get(mon_classes, denom_deg, nothing)
+    isnothing(denom_mons) && error("denom_mons don't exist")
+
+    path_ids_for_deck = _sample_for_deck_computation!(
+        F;
+        min_nconstraints = min_nconstraints(num_mons, denom_mons),
+        min_ninstances = min_ninstances(num_mons, denom_mons)
+    )
+
+    eval_num_mons = evaluate(num_mons, samples(F))
+    eval_denom_mons = evaluate(denom_mons, samples(F))
+    return _deck_vandermonde_matrix(
+        deck_permutations(F)[deck_id],
+        var_id,
+        samples(F),
+        path_ids_for_deck[deck_id],
+        eval_num_mons,
+        eval_denom_mons,
+        min_nconstraints(num_mons, denom_mons),
+        min_ninstances(num_mons, denom_mons)
+    ), (num_mons, denom_mons)
+end
+
+function to_coefficients(
+    expr::Expression,
+    mons::SparseMonomialVector{Tv,Ti}
+) where {Tv<:Integer,Ti<:Integer}
+    es, cs = exponents_coefficients(expr, variables(mons))
+    mexps = [SparseVector{Tv,Ti}(sparse(esᵢ)) for esᵢ in eachcol(es)]
+    ids = [findfirst(m, mons) for m in mexps]
+    v = zeros(ComplexF64, length(mons))
+    v[ids] = cs
+    return v
+end
+
+function to_coefficients(
+    num_expr::Expression,
+    denom_expr::Expression,
+    num_mons::SparseMonomialVector{Tv,Ti},
+    denom_mons::SparseMonomialVector{Tv,Ti}
+) where {Tv<:Integer,Ti<:Integer}
+    return vcat(to_coefficients(num_expr, num_mons), to_coefficients(denom_expr, denom_mons))
+end
+
+function to_coefficients(
+    num_expr::Expression,
+    denom_expr::Expression,
+    mons::SparseMonomialVector{Tv,Ti}
+) where {Tv<:Integer,Ti<:Integer}
+    return to_coefficients(num_expr, denom_expr, mons, mons)
+end

@@ -1,5 +1,6 @@
 export Grading,
     ScalingGroup,
+    grading,
     scaling_symmetries
 
 using AbstractAlgebra: ZZ, matrix, GF, lift, hnf, snf_with_transform 
@@ -53,7 +54,7 @@ function _structure(grading::Grading)
 end
 
 function Base.show(io::IO, grading::Grading)
-
+    print(io, "Grading with $(phrase(nscalings(grading), "scaling"))")
 end
 
 SparseAction = Vector{Tuple{Variable, Expression}}
@@ -116,6 +117,7 @@ function ScalingGroup(
     return ScalingGroup(grading, _structure(grading), vars, action)
 end
 
+grading(scalings::ScalingGroup) = scalings.grading
 Base.copy(s::ScalingGroup) = ScalingGroup(s.grading, s.structure, s.vars, s.action)
 
 function Base.show(io::IO, scalings::ScalingGroup)

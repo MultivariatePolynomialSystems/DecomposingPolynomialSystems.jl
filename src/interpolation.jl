@@ -6,8 +6,8 @@ using LinearAlgebra: norm, dot
 
 function rational_function(
     coeffs::AbstractVector{<:Number},
-    num_mons::MonomialVector,
-    denom_mons::MonomialVector;
+    num_mons::AbstractMonomialVector,
+    denom_mons::AbstractMonomialVector;
     logging::Bool=false,
     tol::Float64=1e-5
 )
@@ -38,7 +38,7 @@ end
 
 function polynomial_function(
     coeffs::AbstractVector{<:Number},
-    mons::MonomialVector;
+    mons::AbstractMonomialVector;
     logging::Bool=false
 )
     @assert length(coeffs) == length(mons.mds)
@@ -55,7 +55,7 @@ end
 
 function reconstruct_function(
     coeffs::AbstractVector{<:Number},
-    mons::MonomialVector;
+    mons::AbstractMonomialVector;
     func_type::String,
     logging::Bool=true,
     tol::Float64=1e-5
@@ -70,13 +70,13 @@ end
 
 function remove_zero_nums_and_denoms(
     coeffs::AbstractMatrix{<:Number},
-    num_mons::MonomialVector,
-    denom_mons::MonomialVector;
+    num_mons::AbstractMonomialVector,
+    denom_mons::AbstractMonomialVector;
     logging::Bool=false
 )
 
     reasonable_rows = []
-    n_num_mons, n_denom_mons = length(num_mons.mds), length(denom_mons.mds)
+    n_num_mons, n_denom_mons = length(num_mons), length(denom_mons)
     @assert size(coeffs, 2) == n_num_mons + n_denom_mons
     for i in axes(coeffs, 1)
         if (!iszero(coeffs[i, 1:n_num_mons]) && !iszero(coeffs[i, n_num_mons+1:end]))
@@ -100,7 +100,7 @@ end
 
 function remove_zero_nums_and_denoms(
     coeffs::AbstractMatrix{<:Number},
-    mons::MonomialVector;
+    mons::AbstractMonomialVector;
     logging::Bool=false
 )
     return _remove_zero_nums_and_denoms(coeffs, mons, mons, logging=logging)
@@ -108,8 +108,8 @@ end
 
 function rational_functions(
     coeffs::AbstractMatrix{<:Number},
-    num_mons::MonomialVector,
-    denom_mons::MonomialVector;
+    num_mons::AbstractMonomialVector,
+    denom_mons::AbstractMonomialVector;
     logging::Bool=true,
     tol::Float64=1e-5
 )
@@ -121,7 +121,7 @@ end
 
 function reconstruct_functions(
     coeffs::AbstractMatrix{<:Number},
-    mons::MonomialVector;
+    mons::AbstractMonomialVector;
     func_type::String,
     logging::Bool=true,
     tol::Float64=1e-5
@@ -182,7 +182,7 @@ end
 
 function interpolate(
     A::AbstractMatrix{CC},
-    mons::MonomialVector;
+    mons::AbstractMonomialVector;
     func_type::String,
     tol::Float64=1e-5
 )
@@ -211,7 +211,7 @@ end
 # one such function.
 function interpolate(
     values::AbstractVector{CC},
-    mons::MonomialVector,
+    mons::AbstractMonomialVector,
     eval_mons::AbstractMatrix{CC};
     func_type::String,
     tol::Float64=1e-5
@@ -224,7 +224,7 @@ end
 function interpolate_vanishing_polynomials(
     samples::Samples,
     vars::Vector{Variable},
-    mons::MonomialVector;
+    mons::AbstractMonomialVector;
     tol::Float64=1e-5
 )
     A = evaluate_monomials_at_samples(mons, samples, vars)
@@ -237,7 +237,7 @@ end
 function interpolate_vanishing_polynomials(
     samples::AbstractMatrix{CC},
     vars::Vector{Variable},
-    mons::MonomialVector;
+    mons::AbstractMonomialVector;
     tol::Float64=1e-5
 )
     @assert size(samples, 1) == length(vars)

@@ -101,7 +101,7 @@ nvariables(F::SampledSystem) = length(variables(F))  # doesn't extend HC.nvariab
 """
     nsolutions(F::SampledSystem) -> Int
 
-Returns the number of solutions of `F` for regular parameters.
+Returns the number of solutions of `F` obtained by [`run_monodromy`](@ref) method.
 """
 HC.nsolutions(F::SampledSystem) = F.mon_info.n_solutions
 
@@ -122,8 +122,8 @@ ninstances(F::SampledSystem) = sum([ninstances(s) for s in values(samples(F))])
 """
     nsamples(F::SampledSystem) -> Int
 
-Returns the number of samples of `F`. Notice that ninstances(F)*nsolutions(F) doesn't
-have to be equal to nsamples(F).
+Returns the number of samples of `F`. Notice that `ninstances(F)*nsolutions(F)` doesn't
+have to be equal to `nsamples(F)`.
 """
 function nsamples(F::SampledSystem)
     return sum([nsamples(s) for s in values(samples(F))])
@@ -210,11 +210,13 @@ function random_samples(samples::Samples)
     return M2VV(samples.solutions[:, :, instance_id]), samples.parameters[:, instance_id]
 end
 
+all_solutions_samples(F::SampledSystem) = samples(F)[Vector(1:nsolutions(F))]
+
 function random_samples(
     F::SampledSystem;
     path_ids::Vector{Int}
 )
-    samples = F.samples[Vector(1:nsolutions(F))]
+    samples = all_solutions_samples(F)
     instance_id = rand(1:ninstances(samples))
     return M2VV(samples.solutions[:, path_ids, instance_id]), samples.parameters[:, instance_id]
 end
@@ -301,7 +303,7 @@ function extract_samples(
     end
     for i in k:n_instances
         while true
-            instance_id = rand(1:i-1)
+            instance_id = rand(1:i-1)  # TODO: what if i == 1?
             p₀ = all_params[:, instance_id]
             sols₀ = M2VV(all_sols[:, :, instance_id])
             p₁ = randn(ComplexF64, nparameters(F))
@@ -330,10 +332,12 @@ defined by `path_ids` to `n_instances` random parameters.
 """
 function sample!(
     F::SampledSystem;
-    path_ids::Vector{Int}=Vector(1:nsolutions(F)),
+    path_ids::AbstractVector{Int}=1:nsolutions(F),
     n_instances::Int=1
 )
+    (length(path_ids) == 0 || n_instances ≤ 0) && return F
     p₁s = [randn(ComplexF64, nparameters(F)) for _ in 1:n_instances]
+    path_ids = sort(Vector{Int}(path_ids))
     samples = get(F.samples, path_ids, nothing)
     if isnothing(samples)
         sols₀, p₀ = random_samples(F; path_ids=path_ids)
