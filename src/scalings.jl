@@ -322,5 +322,9 @@ function to_classes(
         end
         push!(classes[deg], (uexp, pexp))
     end
-    return classes
+    new_classes = Dict{SparseVector{Tv,Ti}, SparseMatrixMonomialVector{Tv,Ti}}()
+    for (deg, mons) in classes
+        new_classes[deg] = SparseMatrixMonomialVector{Tv,Ti}(classes[deg])
+    end
+    return new_classes
 end

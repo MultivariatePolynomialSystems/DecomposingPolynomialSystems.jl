@@ -254,6 +254,7 @@ unknowns(mons::SparseMonomialVector) = mons.unknowns
 HC.parameters(mons::SparseMonomialVector) = mons.parameters
 variables(mons::SparseMonomialVector) = vcat(unknowns(mons), parameters(mons))
 nunknowns(mons::SparseMonomialVector) = length(mons.unknowns)
+HC.nparameters(mons::SparseMonomialVector) = length(mons.parameters)
 Base.length(mons::SparseMonomialVector) = length(mons.unkn_dep_mexps[1]) + length(mons.param_only_mexps)
 is_param_only(mons::SparseMonomialVector) = length(mons.unkn_dep_mexps[1]) == 0
 nunkn_dep(mons::SparseMonomialVector) = length(mons.unkn_dep_mexps[1])
@@ -307,9 +308,77 @@ function Base.gcd(mons::SparseMonomialVector{Tv,Ti}) where {Tv<:Integer,Ti<:Inte
         )
     end
     return vcat(
-        min.(mons.unkn_dep_mexps[1]..., spzeros(Tv, Ti, nunknowns(mons))),
+        spzeros(Tv, Ti, nunknowns(mons)),
         min.(mons.unkn_dep_mexps[2]..., mons.param_only_mexps...)
     )
+end
+
+struct SparseMatrixMonomialVector{Tv<:Integer,Ti<:Integer} <: AbstractMonomialVector
+    unkn_dep_mexps::NTuple{2, SparseMatrixCSC{Tv,Ti}}
+    param_only_mexps::SparseMatrixCSC{Tv,Ti}
+    unknowns::Vector{Variable}
+    parameters::Vector{Variable}
+end
+
+function SparseMatrixMonomialVector{Tv,Ti}(
+    mons::SparseMonomialVector{Tv,Ti}
+) where {Tv<:Integer,Ti<:Integer}
+
+    unkn_dep_1 = length(mons.unkn_dep_mexps[1]) == 0 ? spzeros(nunknowns(mons), 0) : Base.reduce(hcat, mons.unkn_dep_mexps[1])
+    unkn_dep_2 = length(mons.unkn_dep_mexps[2]) == 0 ? spzeros(nparameters(mons), 0) : Base.reduce(hcat, mons.unkn_dep_mexps[2])
+    param_only = length(mons.param_only_mexps) == 0 ? spzeros(nparameters(mons), 0) : Base.reduce(hcat, mons.param_only_mexps)
+    return SparseMatrixMonomialVector{Tv,Ti}(
+        (unkn_dep_1, unkn_dep_2),
+        param_only,
+        mons.unknowns,
+        mons.parameters
+    )
+end
+
+nunknowns(mons::SparseMatrixMonomialVector) = length(mons.unknowns)
+Base.length(mons::SparseMatrixMonomialVector) = size(mons.unkn_dep_mexps[1], 2) + size(mons.param_only_mexps, 2)
+is_param_only(mons::SparseMatrixMonomialVector) = size(mons.unkn_dep_mexps[1], 2) == 0
+nunkn_dep(mons::SparseMatrixMonomialVector) = size(mons.unkn_dep_mexps[1], 2)
+nparam_only(mons::SparseMatrixMonomialVector) = size(mons.param_only_mexps, 2)
+
+function Base.vcat(monVs::SparseMatrixMonomialVector{Tv,Ti}...) where {Tv<:Integer,Ti<:Integer}
+    return SparseMatrixMonomialVector{Tv,Ti}(
+        (Base.reduce(hcat, [mons.unkn_dep_mexps[1] for mons in monVs]), Base.reduce(hcat, [mons.unkn_dep_mexps[2] for mons in monVs])),
+        Base.reduce(hcat, [mons.param_only_mexps for mons in monVs]),
+        monVs[1].unknowns,
+        monVs[1].parameters
+    )
+end
+
+function to_expressions(mons::SparseMatrixMonomialVector)
+    return vcat(
+        [to_expression(
+            mons.unknowns,
+            mons.unkn_dep_mexps[1][:, i],
+            mons.parameters,
+            mons.unkn_dep_mexps[2][:, i]
+        ) for i in axes(mons.unkn_dep_mexps[1], 2)],
+        [prodpow(mons.parameters, mons.param_only_mexps[:, i]) for i in axes(mons.param_only_mexps, 2)]
+    )
+end
+
+function Base.gcd(mons::SparseMatrixMonomialVector{Tv,Ti}) where {Tv<:Integer,Ti<:Integer}
+    if nparam_only(mons) == 0
+        return vcat(
+            vec(minimum(mons.unkn_dep_mexps[1]; dims=2)),
+            vec(minimum(mons.unkn_dep_mexps[2]; dims=2))
+        )
+    elseif nunkn_dep(mons) == 0
+        return vcat(
+            spzeros(Tv, Ti, nunknowns(mons)),
+            vec(minimum(mons.param_only_mexps; dims=2))
+        )
+    else
+        return vcat(
+            spzeros(Tv, Ti, nunknowns(mons)),
+            vec(minimum(hcat(minimum(mons.unkn_dep_mexps[2]; dims=2), minimum(mons.param_only_mexps; dims=2)); dims=2))
+        )
+    end
 end
 
 # Structure for evaluated monomials
@@ -379,6 +448,21 @@ function HC.evaluate(
     unkn_dep = zeros(ComplexF64, nunkn_dep(mons), nsolutions(samples), ninstances(samples))
     for (i, (uexp, pexp)) in enumerate(zip(mons.unkn_dep_mexps...))
         unkn_dep[i, :, :] = prodpow(samples.solutions, uexp).*transpose(prodpow(samples.parameters, pexp))
+    end
+    return EvaluatedMonomials(unkn_dep, param_only)
+end
+
+function HC.evaluate(
+    mons::SparseMatrixMonomialVector,
+    samples::Samples
+)
+    param_only = zeros(ComplexF64, nparam_only(mons), ninstances(samples))
+    for i in axes(mons.param_only_mexps, 2)
+        param_only[i, :] = prodpow(samples.parameters, mons.param_only_mexps[:, i])
+    end
+    unkn_dep = zeros(ComplexF64, nunkn_dep(mons), nsolutions(samples), ninstances(samples))
+    for i in axes(mons.unkn_dep_mexps[1], 2)
+        unkn_dep[i, :, :] = prodpow(samples.solutions, mons.unkn_dep_mexps[1][:, i]).*transpose(prodpow(samples.parameters, mons.unkn_dep_mexps[2][:, i]))
     end
     return EvaluatedMonomials(unkn_dep, param_only)
 end

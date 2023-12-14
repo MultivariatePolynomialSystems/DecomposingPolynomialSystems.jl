@@ -17,7 +17,7 @@ export SampledSystem,
     block_partitions,
     deck_permutations
 
-using HomotopyContinuation: Result, MonodromyResult, nsolutions, ntracked
+using HomotopyContinuation: Result, MonodromyResult, nsolutions, ntracked, is_success, solution
 using HomotopyContinuation: ParameterHomotopy, Tracker, track
 
 const MONODROMY_SOLVE_REF = "https://www.juliahomotopycontinuation.org/HomotopyContinuation.jl/stable/monodromy/"
@@ -368,12 +368,21 @@ end
 function track_parameter_homotopy(
     F::System,
     (x₀, p₀)::NTuple{2, AbstractVector{<:Number}},
-    p₁::AbstractVector{<:Number}
+    p₁::AbstractVector{<:Number},
+    p_inter::AbstractVector{<:Number} # intermediate parameter
 )
-    H = ParameterHomotopy(F; start_parameters=p₀, target_parameters=p₁) # straight line between p₀ and p₁
-    res = track(Tracker(H), x₀)
+
+    H₁ = ParameterHomotopy(F; start_parameters=p₀, target_parameters=p_inter)
+    res = track(Tracker(H₁), x₀)
     if !is_success(res)
         @warn "Tracking was not successful: stopped at t = $(res.t)"
     end
-    return res.solution
+
+    H₂ = ParameterHomotopy(F; start_parameters=p_inter, target_parameters=p₁)
+    res = track(Tracker(H₂), solution(res))
+    if !is_success(res)
+        @warn "Tracking was not successful: stopped at t = $(res.t)"
+    end
+
+    return solution(res)
 end
