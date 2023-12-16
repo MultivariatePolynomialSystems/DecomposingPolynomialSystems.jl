@@ -407,7 +407,7 @@ function symmetries_fixing_parameters_graded!(
     symmetries = _init_symmetries(length(C), unknowns(F))
     mons = DenseMonomialVector{Int8, Int16}(unknowns=unknowns(F), parameters=parameters(F))
 
-    for d in degree_bound:degree_bound
+    for d in 1:degree_bound
         extend!(mons; degree=d, extend_params=param_dep)
         mon_classes = to_classes(mons, grading)
 
