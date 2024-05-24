@@ -1,7 +1,7 @@
 name = "DecomposingPolynomialSystems"
 uuid = "f22b1612-9f73-4f98-889e-ed5396e1a4da"
 authors = ["Viktor Korotynskiy <korotynskiy.viktor@gmail.com> and contributors"]
-version = "1.0.0-DEV"
+version = "1.0.0"
 
 [deps]
 AbstractAlgebra = "c3fe647b-3220-5bb0-a1ea-a7954cac585d"

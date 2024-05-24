@@ -623,13 +623,13 @@ function symmetries_fixing_parameters!(
     logging::Bool=false
 )
 
-    if length(F.deck_permutations) == 1 # trivial group of symmetries
+    if length(deck_permutations(F)) == 1 # trivial group of symmetries
         return DeckTransformationGroup(F)
     end
 
     scalings = _scalings_commuting_with_deck(F, scaling_symmetries(F))
     scalings = param_dep ? scalings : restrict_scalings(scalings, unknowns(F))  # TODO: justify!
-    if isempty(scalings.grading)
+    if isempty(grading(scalings))
         logging && printstyled("Running dense version...\n", color=:green)
         return symmetries_fixing_parameters_dense!(
             F;
@@ -642,7 +642,7 @@ function symmetries_fixing_parameters!(
         logging && printstyled("Running graded version...\n", color=:green)
         return symmetries_fixing_parameters_graded!(
             F,
-            scalings;
+            grading(scalings);
             degree_bound=degree_bound,
             tols=tols,
             logging=logging

@@ -5,9 +5,6 @@ const HC = HomotopyContinuation
 using HomotopyContinuation.ModelKit
 export @var, Variable, Expression, System
 
-# Exports for testing
-# export degree
-
 using SparseArrays: SparseVector, SparseMatrixCSC, spzeros, AbstractSparseVector, findnz, sparse
 using Combinatorics: partitions, multiset_permutations, combinations
 using LinearAlgebra: nullspace
