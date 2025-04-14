@@ -1,6 +1,8 @@
 # DecomposingPolynomialSystems.jl
 
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://multivariatepolynomialsystems.github.io/DecomposingPolynomialSystems.jl/dev)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://multivariatepolynomialsystems.github.io/DecomposingPolynomialSystems.jl/dev)
+[![Dev](https://img.shields.io/badge/docs-dev-orange.svg)](https://multivariatepolynomialsystems.github.io/DecomposingPolynomialSystems.jl/dev)
+
 
 DecomposingPolynomialSystems.jl is a Julia package that computes the symmetries that fix the parameters (specifically, the group of deck transformations) of a parametric polynomial system with finitely many solutions with a view towards decomposing the given polynomial system.
 
