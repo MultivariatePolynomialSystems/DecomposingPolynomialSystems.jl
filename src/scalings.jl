@@ -34,7 +34,7 @@ end
 nfree(grading::Grading) = isnothing(grading.free_part) ? 0 : size(grading.free_part, 1)
 nscalings(grading::Grading) = grading.nscalings
 Base.isempty(grading::Grading) = isnothing(grading.free_part) && isempty(grading.mod_part)
-Base.copy(grading::Grading) = Grading(grading.free_part, grading.mod_part)
+Base.copy(grading::Grading) = Grading(nscalings(grading), grading.free_part, grading.mod_part)
 
 function _structure(grading::Grading)
     str = ""

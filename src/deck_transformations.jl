@@ -57,7 +57,7 @@ struct DeckTransformationGroup
 end
 
 function DeckTransformationGroup(F::SampledSystem)
-    symmetries = _init_symmetries(length(F.deck_permutations), unknowns(F))
+    symmetries = _init_symmetries(length(deck_permutations(F)), unknowns(F))
     return DeckTransformationGroup(symmetries, F)
 end
 
@@ -628,7 +628,7 @@ function symmetries_fixing_parameters!(
     end
 
     scalings = _scalings_commuting_with_deck(F, scaling_symmetries(F))
-    scalings = param_dep ? scalings : restrict_scalings(scalings, unknowns(F))  # TODO: justify!
+    # scalings = param_dep ? scalings : restrict_scalings(scalings, unknowns(F))  # TODO: justify!
     if isempty(grading(scalings))
         logging && printstyled("Running dense version...\n", color=:green)
         return symmetries_fixing_parameters_dense!(
@@ -644,6 +644,7 @@ function symmetries_fixing_parameters!(
             F,
             grading(scalings);
             degree_bound=degree_bound,
+            param_dep=param_dep,
             tols=tols,
             logging=logging
         )
