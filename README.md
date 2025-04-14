@@ -1,6 +1,6 @@
 # DecomposingPolynomialSystems.jl
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://multivariatepolynomialsystems.github.io/DecomposingPolynomialSystems.jl/dev)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://multivariatepolynomialsystems.github.io/DecomposingPolynomialSystems.jl/stable)
 [![Dev](https://img.shields.io/badge/docs-dev-orange.svg)](https://multivariatepolynomialsystems.github.io/DecomposingPolynomialSystems.jl/dev)
 
 
