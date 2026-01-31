@@ -53,17 +53,17 @@ A `DeckTransformationGroup` is the result of deck transformations computation.
 struct DeckTransformationGroup
     maps::Vector{DeckTransformation}
     group::GapObj
-    F::SampledSystem
+    F::SampledParametricSystem
 end
 
-function DeckTransformationGroup(F::SampledSystem)
+function DeckTransformationGroup(F::SampledParametricSystem)
     symmetries = _init_symmetries(length(deck_permutations(F)), unknowns(F))
     return DeckTransformationGroup(symmetries, F)
 end
 
 function DeckTransformationGroup(
     symmetries::Vector{Vector{MiExpression}},
-    F::SampledSystem
+    F::SampledParametricSystem
 )
     action = [DeckTransformation(symmetry, unknowns(F), parameters(F)) for symmetry in symmetries]
     return DeckTransformationGroup(action, to_group(deck_permutations(F)), F)
@@ -386,7 +386,7 @@ end
 # end
 
 function _sample_for_deck_computation(
-    F::SampledSystem;
+    F::SampledParametricSystem;
     n_instances::Int
 )
     Δ_ninstances = n_instances - ninstances(F)
@@ -396,7 +396,7 @@ function _sample_for_deck_computation(
 end
 
 function symmetries_fixing_parameters_graded!(
-    F::SampledSystem,
+    F::SampledParametricSystem,
     grading::Grading;
     degree_bound::Integer=1,
     param_dep::Bool=true,
@@ -477,7 +477,7 @@ function symmetries_fixing_parameters_graded!(
 end
 
 function symmetries_fixing_parameters_dense!(
-    F::SampledSystem; 
+    F::SampledParametricSystem; 
     degree_bound::Integer=1,
     param_dep::Bool=true,
     tols::Tolerances=Tolerances(),
@@ -546,7 +546,7 @@ to_CC(scaling::Tuple{Tv, SparseVector{Tv,Ti}}) where {Tv<:Integer,Ti<:Integer} =
 function _deck_action(
     deck_permutation::Vector{Int},
     (x₀, p₀)::NTuple{2, AbstractVector{<:Number}},
-    F::SampledSystem;
+    F::SampledParametricSystem;
     tol::Real=1e-5
 )
     sols, params = all_solutions_samples(F).solutions, all_solutions_samples(F).parameters
@@ -565,7 +565,7 @@ end
 function _deck_commutes_with_scaling(
     deck_permutation::Vector{Int},
     scaling::Tuple{Tv, SparseVector{Tv,Ti}},
-    F::SampledSystem;
+    F::SampledParametricSystem;
     tol::Real=1e-5
 ) where {Tv<:Integer,Ti<:Integer}
 
@@ -584,7 +584,7 @@ function _deck_commutes_with_scaling(
 end
 
 function _all_deck_commute(
-    F::SampledSystem,
+    F::SampledParametricSystem,
     scaling::Tuple{Tv, SparseVector{Tv, Ti}};
     tol::Real=1e-5
 ) where {Tv<:Integer,Ti<:Integer}
@@ -597,10 +597,13 @@ function _all_deck_commute(
     return true
 end
 
-function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingGroup)
-    grading = scalings.grading
-    final_grading = Grading{Int8, Int16}(nfree(grading), grading.free_part, [])
-    for (sᵢ, Uᵢ) in grading.mod_part
+function _scalings_commuting_with_deck(F::SampledParametricSystem, scalings::ScalingGroup)
+    if isempty(grading(scalings))
+        return scalings
+    end
+    grding = scalings.grading
+    final_grading = Grading{Int8, Int16}(nfree(grding), grding.free_part, [])
+    for (sᵢ, Uᵢ) in grding.mod_part
         Vᵢ = Array{Int}(undef, 0, size(Uᵢ, 2))
         # TODO: Uᵢ ↦ all linear combinations of rows of Uᵢ (might not commute with 2 gens, but commutes with their combination)
         for j in axes(Uᵢ, 1)
@@ -616,7 +619,7 @@ function _scalings_commuting_with_deck(F::SampledSystem, scalings::ScalingGroup)
 end
 
 function symmetries_fixing_parameters!(
-    F::SampledSystem;
+    F::SampledParametricSystem;
     degree_bound::Integer=1,
     param_dep::Bool=true,
     tols::Tolerances=Tolerances(),
@@ -627,7 +630,8 @@ function symmetries_fixing_parameters!(
         return DeckTransformationGroup(F)
     end
 
-    scalings = _scalings_commuting_with_deck(F, scaling_symmetries(F))
+    scalings = scaling_symmetries(F)
+    scalings = _scalings_commuting_with_deck(F, scalings)
     # scalings = param_dep ? scalings : restrict_scalings(scalings, unknowns(F))  # TODO: justify!
     if isempty(grading(scalings))
         logging && printstyled("Running dense version...\n", color=:green)
@@ -726,7 +730,7 @@ function reduced_nullspace(A::AbstractMatrix{<:Number}; tols::Tolerances=Toleran
 end
 
 function deck_vandermonde_dense(
-    F::SampledSystem;
+    F::SampledParametricSystem;
     deck_id::Int,
     var::Variable,
     degree::Integer=1,
@@ -765,7 +769,7 @@ function to_multiexponent(mon::Expression, vars::Vector{Variable})
 end
 
 function deck_vandermonde_graded(
-    F::SampledSystem,
+    F::SampledParametricSystem,
     grading::Grading;
     deck_id::Int,
     var::Variable,

@@ -73,7 +73,7 @@ end
 
 ScalingGroup{Tv,Ti}(
     vars::Vector{Variable}
-) where {Tv<:Integer,Ti<:Integer} = ScalingGroup(Grading{Tv,Ti}(), "N/A", vars, ([], []))
+) where {Tv<:Integer,Ti<:Integer} = ScalingGroup(Grading{Tv,Ti}(), "N/A", vars, (SparseAction[], Tuple{Tv, Vector{SparseAction}}[]))
 
 function create_action(vars::Vector{Variable}, base::Union{Number, Vector{Variable}}, U::SparseMatrixCSC)
     action = Vector{SparseAction}([[] for _ in axes(U, 1)])
@@ -244,7 +244,7 @@ function scaling_symmetries(F::System)
     return ScalingGroup(Grading{Int8, Int16}(s, U), vars)
 end
 
-scaling_symmetries(F::SampledSystem) = scaling_symmetries(F.system)
+scaling_symmetries(F::SampledParametricSystem) = scaling_symmetries(F.system)
 
 # TODO: extend to remove rows dependent on other blocks
 function reduce(grading::Grading{Tv,Ti}) where {Tv<:Integer,Ti<:Integer}
@@ -288,7 +288,7 @@ scaling_symmetries(
     vars::Vector{Variable}
 ) = restrict_scalings(scaling_symmetries(F), vars)
 scaling_symmetries(
-    F::SampledSystem,
+    F::SampledParametricSystem,
     vars::Vector{Variable}
 ) = scaling_symmetries(F.system, vars)
 

@@ -1,14 +1,8 @@
-export SampledSystem,
+export SampledParametricSystem,
     MonodromyInfo,
     Samples,
     run_monodromy,
     sample!,
-    unknowns,
-    parameters,
-    variables,
-    nunknowns,
-    nparameters,
-    nvariables,
     nsolutions,
     nsamples,
     ninstances,
@@ -17,7 +11,7 @@ export SampledSystem,
     block_partitions,
     deck_permutations
 
-using HomotopyContinuation: Result, MonodromyResult, nsolutions, ntracked, is_success, solution
+using HomotopyContinuation: Result, MonodromyResult, ntracked, is_success, solution
 using HomotopyContinuation: ParameterHomotopy, Tracker, track
 
 const MONODROMY_SOLVE_REF = "https://www.juliahomotopycontinuation.org/HomotopyContinuation.jl/stable/monodromy/"
@@ -42,116 +36,110 @@ Samples(
     params::Vector{ComplexF64}
 ) = Samples(reshape(sols, size(sols)..., 1), reshape(params, :, 1))
 
-HC.nsolutions(samples::Samples) = size(samples.solutions, 2)
+nsolutions(samples::Samples) = size(samples.solutions, 2)
 ninstances(samples::Samples) = size(samples.parameters, 2)
 nsamples(samples::Samples) = nsolutions(samples)*ninstances(samples)
 
-mutable struct SampledSystem
-    system::System
+mutable struct SampledParametricSystem
+    system::ParametricSystem
     mon_info::MonodromyInfo
     samples::Dict{Vector{Int}, Samples} # key: ids of solution paths
 end
 
-unknowns(F::System) = HC.variables(F)
-
 """
-    unknowns(F::SampledSystem) -> Vector{Variable}
+    unknowns(F::SampledParametricSystem) -> Vector{Variable}
 
 Returns the vector of unknowns of `F`.
 """
-unknowns(F::SampledSystem) = unknowns(F.system)
+unknowns(F::SampledParametricSystem) = unknowns(F.system)
 
 """
-    parameters(F::SampledSystem) -> Vector{Variable}
+    parameters(F::SampledParametricSystem) -> Vector{Variable}
 
 Returns the vector of parameters of `F`.
 """
-HC.parameters(F::SampledSystem) = parameters(F.system)
-
-variables(F::System) = vcat(unknowns(F), parameters(F))  # does a different thing than HC.variables
+parameters(F::SampledParametricSystem) = parameters(F.system)
 
 """
-    variables(F::SampledSystem) -> Vector{Variable}
+    variables(F::SampledParametricSystem) -> Vector{Variable}
 
 Returns the concatenated vector of unknowns and parameters of `F`.
 """
-variables(F::SampledSystem) = variables(F.system)
+variables(F::SampledParametricSystem) = variables(F.system)
 
 """
-    nunknowns(F::SampledSystem) -> Int
+    nunknowns(F::SampledParametricSystem) -> Int
 
 Returns the number of unknowns of `F`.
 """
-nunknowns(F::SampledSystem) = length(unknowns(F))  # equivalent to HC.nvariables
+nunknowns(F::SampledParametricSystem) = length(unknowns(F))  # equivalent to HC.nvariables
 
 """
-    nparameters(F::SampledSystem) -> Int
+    nparameters(F::SampledParametricSystem) -> Int
 
 Returns the number of parameters of `F`.
 """
-HC.nparameters(F::SampledSystem) = length(parameters(F))
+nparameters(F::SampledParametricSystem) = length(parameters(F))
 
 """
-    nvariables(F::SampledSystem) -> Int
+    nvariables(F::SampledParametricSystem) -> Int
 
 Returns the number of variables of `F`.
 """
-nvariables(F::SampledSystem) = length(variables(F))  # doesn't extend HC.nvariables, does a different thing
+nvariables(F::SampledParametricSystem) = length(variables(F))  # doesn't extend HC.nvariables, does a different thing
 
 """
-    nsolutions(F::SampledSystem) -> Int
+    nsolutions(F::SampledParametricSystem) -> Int
 
 Returns the number of solutions of `F` obtained by [`run_monodromy`](@ref) method.
 """
-HC.nsolutions(F::SampledSystem) = F.mon_info.n_solutions
+nsolutions(F::SampledParametricSystem) = F.mon_info.n_solutions
 
 """
-    samples(F::SampledSystem) -> Dict{Vector{Int}, Samples}
+    samples(F::SampledParametricSystem) -> Dict{Vector{Int}, Samples}
 
 Returns the dictionary of samples of a polynomial system `F`.
 """
-samples(F::SampledSystem) = F.samples
+samples(F::SampledParametricSystem) = F.samples
 
 """
-    ninstances(F::SampledSystem) -> Int
+    ninstances(F::SampledParametricSystem) -> Int
 
 Returns the number of sampled instances of `F`.
 """
-ninstances(F::SampledSystem) = sum([ninstances(s) for s in values(samples(F))])
+ninstances(F::SampledParametricSystem) = sum([ninstances(s) for s in values(samples(F))])
 
 """
-    nsamples(F::SampledSystem) -> Int
+    nsamples(F::SampledParametricSystem) -> Int
 
 Returns the number of samples of `F`. Notice that `ninstances(F)*nsolutions(F)` doesn't
 have to be equal to `nsamples(F)`.
 """
-function nsamples(F::SampledSystem)
-    return sum([nsamples(s) for s in values(samples(F))])
-end
+nsamples(F::SampledParametricSystem) = sum([nsamples(s) for s in values(samples(F))])
 
 """
-    monodromy_permutations(F::SampledSystem) -> Vector{Vector{Int}}
+    monodromy_permutations(F::SampledParametricSystem) -> Vector{Vector{Int}}
 
 Returns the vector of monodromy permutations of `F` obtained by [`run_monodromy`](@ref).
 """
-monodromy_permutations(F::SampledSystem) = F.mon_info.monodromy_permutations
+monodromy_permutations(F::SampledParametricSystem) = F.mon_info.monodromy_permutations
 
 """
-    block_partitions(F::SampledSystem) -> Vector{Vector{Vector{Int}}}
+    block_partitions(F::SampledParametricSystem) -> Vector{Vector{Vector{Int}}}
 
 Returns the vector of all block partitions of the solutions of `F`.
 """
-block_partitions(F::SampledSystem) = F.mon_info.block_partitions
+block_partitions(F::SampledParametricSystem) = F.mon_info.block_partitions
 
 """
-    deck_permutations(F::SampledSystem) -> Vector{Vector{Int}}
+    deck_permutations(F::SampledParametricSystem) -> Vector{Vector{Int}}
 
 Returns the vector of deck permutations of the solutions (actions of deck transformations
 on the solutions) of `F`.
 """
-deck_permutations(F::SampledSystem) = F.mon_info.deck_permutations
+deck_permutations(F::SampledParametricSystem) = F.mon_info.deck_permutations
 
-(F::SampledSystem)(
+(F::SampledParametricSystem)(
     x₀::AbstractVector{<:Number},
     p₀::AbstractVector{<:Number}
 ) = F.system(x₀, p₀)
@@ -164,13 +152,13 @@ function _filter_permutations(perms::Matrix{Int})::Vector{Vector{Int}}
     )
 end
 
-function SampledSystem(F::System, MR::MonodromyResult)
+function SampledParametricSystem(F::ParametricSystem, MR::MonodromyResult)
     sols, params  = hcat(HC.solutions(MR)...), MR.parameters
     n_sols = size(sols, 2)
 
     if n_sols == 1
         @warn "Monodromy result has only 1 solution, no monodromy group available"
-        return SampledSystem(
+        return SampledParametricSystem(
             F,
             MonodromyInfo(),
             Dict([1] => Samples(sols, params))
@@ -181,7 +169,7 @@ function SampledSystem(F::System, MR::MonodromyResult)
     block_partitions = all_block_partitions(to_group(monodromy_permutations))
     deck_permutations = to_permutations(centralizer(monodromy_permutations))
 
-    return SampledSystem(
+    return SampledParametricSystem(
         F,
         MonodromyInfo(
             n_sols,
@@ -193,8 +181,8 @@ function SampledSystem(F::System, MR::MonodromyResult)
     )
 end
 
-function Base.show(io::IO, F::SampledSystem)
-    println(io, "SampledSystem with $(phrase(nsamples(F), "sample"))")
+function Base.show(io::IO, F::SampledParametricSystem)
+    println(io, "SampledParametricSystem with $(phrase(nsamples(F), "sample"))")
     print(io, " $(phrase(nunknowns(F), "unknown")): ", join(unknowns(F), ", "))
     if !isempty(parameters(F))
         print(io, "\n $(phrase(nparameters(F), "parameter")): ", join(parameters(F), ", "))
@@ -210,10 +198,10 @@ function random_samples(samples::Samples)
     return M2VV(samples.solutions[:, :, instance_id]), samples.parameters[:, instance_id]
 end
 
-all_solutions_samples(F::SampledSystem) = samples(F)[Vector(1:nsolutions(F))]
+all_solutions_samples(F::SampledParametricSystem) = samples(F)[Vector(1:nsolutions(F))]
 
 function random_samples(
-    F::SampledSystem;
+    F::SampledParametricSystem;
     path_ids::Vector{Int}
 )
     samples = all_solutions_samples(F)
@@ -256,7 +244,7 @@ function run_monodromy(
     if length(HC.solutions(MR)) == 1
         error("Only 1 solution found, no monodromy group available. Try running again...")
     end
-    return SampledSystem(F, MR)
+    return SampledParametricSystem(F, MR)
 end
 
 """
@@ -265,7 +253,7 @@ end
 Reruns [`monodromy_solve`]($(MONODROMY_SOLVE_REF)) on a given sampled polynomial system `F`.
 """
 function run_monodromy(
-    F::SampledSystem,
+    F::SampledParametricSystem,
     xp₀::Union{Nothing, Tuple{AbstractVector{<:AbstractVector{<:Number}}, AbstractVector{<:Number}}}=nothing;
     options...
 )
@@ -278,12 +266,12 @@ function run_monodromy(
     if length(HC.solutions(MR)) == 1
         error("Only 1 solution found, no monodromy group available. Try running again...")
     end
-    return SampledSystem(F.system, MR)
+    return SampledParametricSystem(F.system, MR)
 end
 
 function extract_samples(
     results::Vector{Tuple{Result, Vector{ComplexF64}}},
-    F::SampledSystem;
+    F::SampledParametricSystem;
     resample::Bool=false
 )
     n_tracked = ntracked(results[1][1])
@@ -331,7 +319,7 @@ Uses [`solve`]($(SOLVE_REF)) method to track the solutions of a poynomial system
 defined by `path_ids` to `n_instances` random parameters.
 """
 function sample!(
-    F::SampledSystem;
+    F::SampledParametricSystem;
     path_ids::AbstractVector{Int}=1:nsolutions(F),
     n_instances::Int=1
 )

@@ -38,12 +38,14 @@ function sparsify!(v::AbstractVector{<:Number}, tol::Real; digits::Integer=0)
             v[j] = round(real(v[j]); digits=digits) + imag(v[j])*im
         end
     end
+    return v
 end
 
 function sparsify!(M::AbstractMatrix{<:Number}, tol::Real; digits::Integer=0)
     for r in eachrow(M)
         sparsify!(r, tol; digits=digits)
     end
+    return M
 end
 
 function simplify_numbers(v::Vector{<:Number})
