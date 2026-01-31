@@ -19,7 +19,7 @@ To get back to the Julia REPL, press backspace.
 ```julia
 using DecomposingPolynomialSystems
 @var x[1:2] p[1:2]
-F = System([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; variables=x, parameters=p)
+F = ParametricSystem([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; unknowns=x, parameters=p)
 symmetries_fixing_parameters(F; degree_bound=1, param_dep=false)
 ```
 The result of the last command is the object of type `DeckTransformationGroup` that contains 4 deck transformations acting on the unknowns `x₁`, `x₂` of the polynomial system `F`:
@@ -41,7 +41,5 @@ DeckTransformationGroup of order 4
    x₂ ↦ im*x₁
 ```
 where `im` is the imaginary unit.
-### Computing invariants
-TBW
-### Decomposition
+### Computing decomposing maps
 TBW
