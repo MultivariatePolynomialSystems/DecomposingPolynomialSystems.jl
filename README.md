@@ -20,11 +20,11 @@ To get back to the Julia REPL, press backspace.
 using DecomposingPolynomialSystems
 @var x[1:2] p[1:2]
 F = ParametricSystem([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; unknowns=x, parameters=p)
-symmetries_fixing_parameters(F; degree_bound=1, param_dep=false)
+automorphisms(F; degree_bound=1, param_dep=false)
 ```
-The result of the last command is the object of type `DeckTransformationGroup` that contains 4 deck transformations acting on the unknowns `x₁`, `x₂` of the polynomial system `F`:
+The result of the last command is the object of type `AutomorphismGroup` that contains 4 automorphisms acting on the unknowns `x₁`, `x₂` of the polynomial system `F`:
 ```
-DeckTransformationGroup of order 4
+AutomorphismGroup of order 4
  structure: C2 x C2
  action:
   1st map:
