@@ -138,7 +138,7 @@ function best_representative(rational_functions::AbstractMatrix{<:Number}, tol::
     n_mons = Int(size(rational_functions, 2)/2)
     A = rational_functions[:,n_mons+1:end]
     A = [-1 zeros(1, n_mons-1); A]
-    R = Matrix{CC}(transpose(nullspace(transpose(A))))
+    R = Matrix{ComplexF64}(transpose(nullspace(transpose(A))))
     R = sparsify(rref(R, tol), tol, digits=1) # 1*R[1,:] + r2*R[2,:] + ... are the solutions
     a = R[:,2:end]*rational_functions[:,1:n_mons] # 1*a[1,:] + r2*a[2,:] + ... are possible numerators
     return nothing
@@ -168,7 +168,7 @@ end
 #     mds = mons.mds
 #     n_mds = length(mds)
 
-#     evaluated_mons = zeros(CC, n_mds, n_sols, n_instances)
+#     evaluated_mons = zeros(ComplexF64, n_mds, n_sols, n_instances)
 #     for i in 1:n_instances
 #         params = view(parameters, :, i)
 #         params_eval = [prod(params.^md[n_unknowns+1:end]) for md in mds]
@@ -181,7 +181,7 @@ end
 # end
 
 function interpolate(
-    A::AbstractMatrix{CC},
+    A::AbstractMatrix{ComplexF64},
     mons::AbstractMonomialVector;
     func_type::String,
     tol::Float64=1e-5
@@ -194,7 +194,7 @@ function interpolate(
         @assert size(A, 2) == 2*length(mons)
     end
 
-    C = Matrix{CC}(transpose(nullspace(A)))
+    C = Matrix{ComplexF64}(transpose(nullspace(A)))
     C = sparsify(rref(C, tol), tol, digits=1)
     if size(C, 1) == 0
         return nothing
@@ -210,9 +210,9 @@ end
 # of the equivalence class of functions f+I(X) with the given values. Obviously, if X = Cⁿ, then there is only
 # one such function.
 function interpolate(
-    values::AbstractVector{CC},
+    values::AbstractVector{ComplexF64},
     mons::AbstractMonomialVector,
-    eval_mons::AbstractMatrix{CC};
+    eval_mons::AbstractMatrix{ComplexF64};
     func_type::String,
     tol::Float64=1e-5
 )
@@ -229,13 +229,13 @@ function interpolate_vanishing_polynomials(
 )
     A = evaluate_monomials_at_samples(mons, samples, vars)
     A = reshape(A, size(A, 1), size(A, 2)*size(A, 3))
-    N = Matrix{CC}(transpose(nullspace(transpose(A))))
+    N = Matrix{ComplexF64}(transpose(nullspace(transpose(A))))
     N = sparsify(rref(N, tol), tol, digits=1)
     return N*mons
 end
 
 function interpolate_vanishing_polynomials(
-    samples::AbstractMatrix{CC},
+    samples::AbstractMatrix{ComplexF64},
     vars::Vector{Variable},
     mons::AbstractMonomialVector;
     tol::Float64=1e-5
@@ -243,14 +243,14 @@ function interpolate_vanishing_polynomials(
     @assert size(samples, 1) == length(vars)
     @assert size(samples, 2) >= length(mons)
     A = evaluate_monomials_at_samples(mons, samples, vars)
-    N = Matrix{CC}(transpose(nullspace(transpose(A))))
+    N = Matrix{ComplexF64}(transpose(nullspace(transpose(A))))
     N = sparsify(rref(N, tol), tol, digits=1)
     return N*mons
 end
 
 function interpolate_dense(
-    samples::AbstractMatrix{CC},
-    values::AbstractVector{CC};
+    samples::AbstractMatrix{ComplexF64},
+    values::AbstractVector{ComplexF64};
     vars::Vector{Variable},
     degree::Int,
     func_type::String,
@@ -260,8 +260,8 @@ function interpolate_dense(
 end
 
 function interpolate_sparse(
-    samples::AbstractMatrix{CC},
-    values::AbstractVector{CC};
+    samples::AbstractMatrix{ComplexF64},
+    values::AbstractVector{ComplexF64};
     vars::Vector{Variable},
     degree::Int,
     func_type::String,
@@ -271,8 +271,8 @@ function interpolate_sparse(
 end
 
 function interpolate(
-    samples::AbstractMatrix{CC},
-    values::AbstractVector{CC};
+    samples::AbstractMatrix{ComplexF64},
+    values::AbstractVector{ComplexF64};
     vars::Vector{Variable},
     degree::Int,
     func_type::String,

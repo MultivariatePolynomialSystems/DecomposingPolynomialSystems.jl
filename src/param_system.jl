@@ -6,8 +6,10 @@ export ParametricSystem,
     nparameters,
     nvariables
 
+const MONODROMY_SOLVE_REF = "https://www.juliahomotopycontinuation.org/HomotopyContinuation.jl/stable/monodromy/"
+
 struct ParametricSystem
-    F::System
+    system::System
     unknowns::Vector{Variable}
     parameters::Vector{Variable}
 end
@@ -32,7 +34,7 @@ nunknowns(F::ParametricSystem) = length(F.unknowns)
 nparameters(F::ParametricSystem) = length(F.parameters)
 nvariables(F::ParametricSystem) = nunknowns(F) + nparameters(F)
 
-System(F::ParametricSystem) = F.F
+System(F::ParametricSystem) = F.system
 equations(F::ParametricSystem) = expressions(System(F))
 nequations(F::ParametricSystem) = length(System(F))
 
@@ -47,6 +49,32 @@ function Base.show(io::IO, F::ParametricSystem)
     end
 end
 
+(F::ParametricSystem)(
+    x₀::AbstractVector{<:Number},
+    p₀::AbstractVector{<:Number}
+) = F.system(x₀, p₀)
+
+
+"""
+    run_monodromy(F::Union{System, AbstractSystem}, xp₀=nothing; options...) -> SampledSystem
+
+Runs [`monodromy_solve`]($(MONODROMY_SOLVE_REF)) on a given polynomial system `F` with starting
+solutions `xp₀[1]` and parameters `xp₀[2]` (if given).
+
+```julia-repl
+julia> @var x a b;
+
+julia> F = ParametricSystem([x^3+a*x+b]; unknowns=[x], parameters=[a,b]);
+
+julia> F = run_monodromy(F, ([[1]], [1,-2]); max_loops_no_progress = 10)
+SampledParametricSystem with 3 samples
+ 1 unknown: x
+ 2 parameters: a, b
+
+ number of solutions: 3
+ sampled instances: 1
+```
+"""
 function run_monodromy(
     F::ParametricSystem,
     start_points::Union{Nothing, Tuple{AbstractVector{<:AbstractVector{<:Number}}, AbstractVector{<:Number}}}=nothing;
@@ -62,4 +90,26 @@ function run_monodromy(
         error("Only 1 solution found, no monodromy group available. Try running again...")
     end
     return SampledParametricSystem(F, MR)
+end
+
+function track_parameter_homotopy(
+    F::ParametricSystem,
+    (x₀, p₀)::NTuple{2, AbstractVector{<:Number}},
+    p₁::AbstractVector{<:Number},
+    p_inter::AbstractVector{<:Number} # intermediate parameter
+)
+
+    H₁ = ParameterHomotopy(System(F); start_parameters=p₀, target_parameters=p_inter)
+    res = track(Tracker(H₁), x₀)
+    if !is_success(res)
+        @warn "Tracking was not successful: stopped at t = $(res.t)"
+    end
+
+    H₂ = ParameterHomotopy(System(F); start_parameters=p_inter, target_parameters=p₁)
+    res = track(Tracker(H₂), solution(res))
+    if !is_success(res)
+        @warn "Tracking was not successful: stopped at t = $(res.t)"
+    end
+
+    return solution(res)
 end

@@ -3,7 +3,7 @@ module DecomposingPolynomialSystems
 import HomotopyContinuation
 const HC = HomotopyContinuation
 using HomotopyContinuation.ModelKit
-export @var, Variable, Expression, subs
+export @var, Variable, Expression
 
 using SparseArrays: SparseVector, SparseMatrixCSC, spzeros, AbstractSparseVector, findnz, sparse
 using Combinatorics: partitions, multiset_permutations, combinations

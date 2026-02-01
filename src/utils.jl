@@ -1,5 +1,3 @@
 include("utils/basic.jl")
-include("utils/aliases.jl")
 include("utils/groups.jl")
 include("utils/Gauss-Jordan.jl")
-include("utils/algebraic_geometry.jl")

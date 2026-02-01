@@ -3,6 +3,7 @@ export SampledParametricSystem,
     Samples,
     run_monodromy,
     sample!,
+    variables,
     nsolutions,
     nsamples,
     ninstances,
@@ -14,7 +15,6 @@ export SampledParametricSystem,
 using HomotopyContinuation: Result, MonodromyResult, ntracked, is_success, solution
 using HomotopyContinuation: ParameterHomotopy, Tracker, track
 
-const MONODROMY_SOLVE_REF = "https://www.juliahomotopycontinuation.org/HomotopyContinuation.jl/stable/monodromy/"
 const SOLVE_REF = "https://www.juliahomotopycontinuation.org/HomotopyContinuation.jl/stable/solve/"
 
 struct MonodromyInfo
@@ -72,7 +72,7 @@ variables(F::SampledParametricSystem) = variables(F.system)
 
 Returns the number of unknowns of `F`.
 """
-nunknowns(F::SampledParametricSystem) = length(unknowns(F))  # equivalent to HC.nvariables
+nunknowns(F::SampledParametricSystem) = length(unknowns(F))
 
 """
     nparameters(F::SampledParametricSystem) -> Int
@@ -86,7 +86,7 @@ nparameters(F::SampledParametricSystem) = length(parameters(F))
 
 Returns the number of variables of `F`.
 """
-nvariables(F::SampledParametricSystem) = length(variables(F))  # doesn't extend HC.nvariables, does a different thing
+nvariables(F::SampledParametricSystem) = length(variables(F))
 
 """
     nsolutions(F::SampledParametricSystem) -> Int
@@ -190,8 +190,9 @@ function Base.show(io::IO, F::SampledParametricSystem)
     print(io, "\n\n")
     println(io, " number of solutions: $(nsolutions(F))")
     print(io, " sampled instances: $(ninstances(F))")
-    # print(io, " deck permutations: $(length(deck_permutations(F)))")
 end
+
+System(F::SampledParametricSystem) = System(F.system)
 
 function random_samples(samples::Samples)
     instance_id = rand(1:ninstances(samples))
@@ -209,44 +210,6 @@ function random_samples(
     return M2VV(samples.solutions[:, path_ids, instance_id]), samples.parameters[:, instance_id]
 end
 
-
-"""
-    run_monodromy(F::Union{System, AbstractSystem}, xp₀=nothing; options...) -> SampledSystem
-
-Runs [`monodromy_solve`]($(MONODROMY_SOLVE_REF)) on a given polynomial system `F` with starting
-solutions `xp₀[1]` and parameters `xp₀[2]` (if given).
-
-```julia-repl
-julia> @var x a b;
-
-julia> F = System([x^3+a*x+b]; variables=[x], parameters=[a,b]);
-
-julia> F = run_monodromy(F, ([[1]], [1,-2]); max_loops_no_progress = 10)
-SampledSystem with 3 samples
- 1 unknown: x
- 2 parameters: a, b
-
- number of solutions: 3
- sampled instances: 1
-```
-"""
-function run_monodromy(
-    F::Union{System, AbstractSystem},
-    xp₀::Union{Nothing, Tuple{AbstractVector{<:AbstractVector{<:Number}}, AbstractVector{<:Number}}}=nothing;
-    options...
-)
-    if isnothing(xp₀)
-        MR = HC.monodromy_solve(F; permutations=true, options...)
-    else
-        sols, p₀ = xp₀
-        MR = HC.monodromy_solve(F, sols, ComplexF64.(p₀); permutations=true, options...)
-    end
-    if length(HC.solutions(MR)) == 1
-        error("Only 1 solution found, no monodromy group available. Try running again...")
-    end
-    return SampledParametricSystem(F, MR)
-end
-
 """
     run_monodromy(F::SampledSystem, xp₀=nothing; options...) -> SampledSystem
 
@@ -254,15 +217,15 @@ Reruns [`monodromy_solve`]($(MONODROMY_SOLVE_REF)) on a given sampled polynomial
 """
 function run_monodromy(
     F::SampledParametricSystem,
-    xp₀::Union{Nothing, Tuple{AbstractVector{<:AbstractVector{<:Number}}, AbstractVector{<:Number}}}=nothing;
+    start_points::Union{Nothing, Tuple{AbstractVector{<:AbstractVector{<:Number}}, AbstractVector{<:Number}}}=nothing;
     options...
 )
-    if isnothing(xp₀)
+    if isnothing(start_points)
         sols, p₀ = random_samples(F; path_ids=Vector(1:nsolutions(F)))
     else
-        sols, p₀ = xp₀  # TODO: do we need this?
+        sols, p₀ = start_points
     end
-    MR = HC.monodromy_solve(F.system, sols, ComplexF64.(p₀); permutations=true, options...)
+    MR = HC.monodromy_solve(System(F), sols, ComplexF64.(p₀); permutations=true, options...)
     if length(HC.solutions(MR)) == 1
         error("Only 1 solution found, no monodromy group available. Try running again...")
     end
@@ -296,7 +259,7 @@ function extract_samples(
             sols₀ = M2VV(all_sols[:, :, instance_id])
             p₁ = randn(ComplexF64, nparameters(F))
             res = HC.solve(
-                F.system,
+                System(F),
                 sols₀,
                 start_parameters = p₀,
                 target_parameters = p₁
@@ -330,7 +293,7 @@ function sample!(
     if isnothing(samples)
         sols₀, p₀ = random_samples(F; path_ids=path_ids)
         res = HC.solve(
-            F.system,
+            System(F),
             sols₀,
             start_parameters = p₀,
             target_parameters = p₁s
@@ -340,7 +303,7 @@ function sample!(
     else
         sols₀, p₀ = random_samples(samples)
         res = HC.solve(
-            F.system,
+            System(F),
             sols₀,
             start_parameters = p₀,
             target_parameters = p₁s
@@ -351,26 +314,4 @@ function sample!(
         F.samples[path_ids] = Samples(sols, params)
     end
     return F
-end
-
-function track_parameter_homotopy(
-    F::System,
-    (x₀, p₀)::NTuple{2, AbstractVector{<:Number}},
-    p₁::AbstractVector{<:Number},
-    p_inter::AbstractVector{<:Number} # intermediate parameter
-)
-
-    H₁ = ParameterHomotopy(F; start_parameters=p₀, target_parameters=p_inter)
-    res = track(Tracker(H₁), x₀)
-    if !is_success(res)
-        @warn "Tracking was not successful: stopped at t = $(res.t)"
-    end
-
-    H₂ = ParameterHomotopy(F; start_parameters=p_inter, target_parameters=p₁)
-    res = track(Tracker(H₂), solution(res))
-    if !is_success(res)
-        @warn "Tracking was not successful: stopped at t = $(res.t)"
-    end
-
-    return solution(res)
 end
