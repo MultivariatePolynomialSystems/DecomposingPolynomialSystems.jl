@@ -8,9 +8,9 @@ In this Julia package we deal with parametric polynomial systems with finitely m
 run_monodromy
 ```
 
-## SampledSystem
+## SampledParametricSystem
 
-`SampledSystem` is a struct type that initially contains a polynomial system, the result of monodromy computations, and the solutions-parameters samples obtained with [`run_monodromy`](@ref) or [`sample!`](@ref).
+`SampledParametricSystem` is a struct type that initially contains a polynomial system, the result of monodromy computations, and the solutions-parameters samples obtained with [`run_monodromy`](@ref) or [`sample!`](@ref).
 
 ```@docs
 unknowns
@@ -25,7 +25,7 @@ ninstances
 nsamples
 monodromy_permutations
 block_partitions
-deck_permutations
+aut_permutations
 ```
 
 ## Sample system

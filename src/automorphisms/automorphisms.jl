@@ -1,10 +1,8 @@
 export Tolerances,
-    DeckTransformation,
-    DeckTransformationGroup,
     symmetries_fixing_parameters_dense!,
     symmetries_fixing_parameters_graded!,
     symmetries_fixing_parameters!,
-    symmetries_fixing_parameters,
+    automorphisms,
     _deck_action, _deck_commutes_with_scaling,
     _scalings_commuting_with_deck,
     _sample_for_deck_computation!,
@@ -16,73 +14,6 @@ export Tolerances,
     rref_tol::Float64=1e-5
     sparsify_tol::Float64=1e-5
 end
-
-MiExpression = Union{Missing, Expression}
-
-struct DeckTransformation
-    exprs::Vector{MiExpression}
-    unknowns::Vector{Variable}
-    parameters::Vector{Variable}
-
-    function DeckTransformation(exprs, unknowns, parameters)
-        # TODO: verify args
-        return new(exprs, unknowns, parameters)
-    end
-end
-
-Base.getindex(dt::DeckTransformation, inds...) = getindex(dt.exprs, inds...)
-
-function Base.show(io::IO, dt::DeckTransformation)
-    println(
-        io,
-        "DeckTransformation: acts on $(phrase(length(dt.unknowns), "unknown")),",
-        " fixes $(phrase(length(dt.parameters), "parameter"))",
-    )
-    println(io, " action:")
-    for i in 1:length(dt.exprs)
-        print(io, "  ", dt.unknowns[i], " ↦ ", dt.exprs[i])
-        i < length(dt.exprs) && print(io, "\n")
-    end
-end
-
-"""
-    DeckTransformationGroup
-
-A `DeckTransformationGroup` is the result of deck transformations computation.
-"""
-struct DeckTransformationGroup
-    maps::Vector{DeckTransformation}
-    group::GapObj
-    F::SampledParametricSystem
-end
-
-function DeckTransformationGroup(F::SampledParametricSystem)
-    symmetries = _init_symmetries(length(deck_permutations(F)), unknowns(F))
-    return DeckTransformationGroup(symmetries, F)
-end
-
-function DeckTransformationGroup(
-    symmetries::Vector{Vector{MiExpression}},
-    F::SampledParametricSystem
-)
-    action = [DeckTransformation(symmetry, unknowns(F), parameters(F)) for symmetry in symmetries]
-    return DeckTransformationGroup(action, to_group(deck_permutations(F)), F)
-end
-
-function Base.show(io::IO, deck::DeckTransformationGroup)
-    println(io, "DeckTransformationGroup of order $(length(deck.maps))")
-    println(io, " structure: ", order(deck.group) == 1 ? "trivial" : group_structure(deck.group))
-    print(io, " action:")
-    for i in eachindex(deck.maps)
-        println(io, "\n  ", to_ordinal(i), " map:")
-        for (j, var) in enumerate(unknowns(deck.F))  # action on parameters is trivial, don't show it
-            print(io, "   ", var, " ↦ ", deck.maps[i][j])
-            j < length(unknowns(deck.F)) && print(io, "\n")
-        end
-    end
-end
-
-Base.getindex(deck::DeckTransformationGroup, inds...) = getindex(deck.maps, inds...)
 
 function _denom_deg(
     num_deg::SparseVector{Tv,Ti},
@@ -226,20 +157,20 @@ function _deck_vandermonde_matrix(
     end
 end
 
-function _all_interpolated(symmetries::Vector{Vector{MiExpression}})
-    for symmetry in symmetries
-        for expr in symmetry
+function _all_interpolated(automorphisms::Vector{Vector{MiExpression}})
+    for automorphism in automorphisms
+        for expr in automorphism
             ismissing(expr) && return false
         end
     end
     return true
 end
 
-function _init_symmetries(n_symmetries::Int, unknowns::Vector{Variable})
-    symmetries = [[missing for j in eachindex(unknowns)] for i in 1:n_symmetries]
-    symmetries = Vector{Vector{MiExpression}}(symmetries)
-    symmetries[1] = Expression.(unknowns)  # set the first to the identity
-    return symmetries
+function _init_automorphisms(n_automorphisms::Int, unknowns::Vector{Variable})
+    automorphisms = [[missing for j in eachindex(unknowns)] for i in 1:n_automorphisms]
+    automorphisms = Vector{Vector{MiExpression}}(automorphisms)
+    automorphisms[1] = Expression.(unknowns)  # set the first to the identity
+    return automorphisms
 end
 
 function _interpolate_deck_function(
@@ -391,7 +322,7 @@ function _sample_for_deck_computation(
 )
     Δ_ninstances = n_instances - ninstances(F)
     if Δ_ninstances > 0
-        sample!(F; path_ids=orbit(deck_permutations(F), 1), n_instances=Δ_ninstances)
+        sample!(F; path_ids=orbit(aut_permutations(F), 1), n_instances=Δ_ninstances)
     end
 end
 
@@ -403,8 +334,8 @@ function symmetries_fixing_parameters_graded!(
     tols::Tolerances=Tolerances(),
     logging::Bool=false
 )
-    C = deck_permutations(F)
-    symmetries = _init_symmetries(length(C), unknowns(F))
+    C = aut_permutations(F)
+    symmetries = _init_automorphisms(length(C), unknowns(F))
     mons = DenseMonomialVector{Int8, Int16}(unknowns=unknowns(F), parameters=parameters(F))
 
     for d in 1:degree_bound
@@ -468,12 +399,12 @@ function symmetries_fixing_parameters_graded!(
 
             if _all_interpolated(symmetries)
                 logging && printstyled("--- All symmetries are interpolated ---\n", color=:blue)
-                return DeckTransformationGroup(symmetries, F)
+                return AutomorphismGroup(symmetries, F)
             end
         end
     end
 
-    return DeckTransformationGroup(symmetries, F)
+    return AutomorphismGroup(symmetries, F)
 end
 
 function symmetries_fixing_parameters_dense!(
@@ -483,8 +414,8 @@ function symmetries_fixing_parameters_dense!(
     tols::Tolerances=Tolerances(),
     logging::Bool=false
 )
-    C = deck_permutations(F)
-    symmetries = _init_symmetries(length(C), unknowns(F))
+    C = aut_permutations(F)
+    symmetries = _init_automorphisms(length(C), unknowns(F))
     mons = DenseMonomialVector{Int8, Int16}(unknowns=unknowns(F), parameters=parameters(F))
 
     for d in 1:degree_bound
@@ -534,11 +465,11 @@ function symmetries_fixing_parameters_dense!(
     
         if _all_interpolated(symmetries)
             logging && printstyled("--- All deck transformations are interpolated ---\n"; color=:blue)
-            return DeckTransformationGroup(symmetries, F)
+            return AutomorphismGroup(symmetries, F)
         end
     end
 
-    return DeckTransformationGroup(symmetries, F)
+    return AutomorphismGroup(symmetries, F)
 end
 
 to_CC(scaling::Tuple{Tv, SparseVector{Tv,Ti}}) where {Tv<:Integer,Ti<:Integer} = [cis(2*pi*k/scaling[1]) for k in scaling[2]]
@@ -589,7 +520,7 @@ function _all_deck_commute(
     tol::Real=1e-5
 ) where {Tv<:Integer,Ti<:Integer}
 
-    for deck_permutation in deck_permutations(F)
+    for deck_permutation in aut_permutations(F)
         if !_deck_commutes_with_scaling(deck_permutation, scaling, F; tol=tol)
             return false
         end
@@ -626,8 +557,8 @@ function symmetries_fixing_parameters!(
     logging::Bool=false
 )
 
-    if length(deck_permutations(F)) == 1 # trivial group of symmetries
-        return DeckTransformationGroup(F)
+    if length(aut_permutations(F)) == 1 # trivial group of symmetries
+        return AutomorphismGroup(F)
     end
 
     scalings = scaling_symmetries(F)
@@ -656,10 +587,10 @@ function symmetries_fixing_parameters!(
 end
 
 """
-    symmetries_fixing_parameters(F::System; degree_bound=1, param_dep=true, kwargs...)
+    automorphisms(F::ParametricSystem; degree_bound=1, param_dep=true, kwargs...)
 
-Given a polynomial system F returns the group of symmetries 
-of `F` that fix the parameters. The keyword
+Given a polynomial system F returns the group of automorphisms 
+of `F` (symmetries that fix the parameters). The keyword
 argument `degree_bound` is used to set the upper bound for the
 degrees of numerator and denominator polynomials in expressions
 for the symmetries. The `param_dep` keyword argument specifies
@@ -669,10 +600,10 @@ on the parameters of `F`.
 ```julia-repl
 julia> @var x[1:2] p[1:2];
 
-julia> F = System([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; variables=x, parameters=p);
+julia> F = ParametricSystem([x[1]^2 - x[2]^2 - p[1], 2*x[1]*x[2] - p[2]]; unknowns=x, parameters=p);
 
-julia> symmetries_fixing_parameters(F; degree_bound=1, param_dep=false)
-DeckTransformationGroup of order 4
+julia> automorphisms(F; degree_bound=1, param_dep=false)
+AutomorphismGroup of order 4
  structure: C2 x C2
  action:
   1st map:
@@ -689,9 +620,9 @@ DeckTransformationGroup of order 4
    x₂ ↦ im*x₁
 ```
 """
-function symmetries_fixing_parameters(  # TODO: extend to take an expression map
-    F::System;
-    xp₀::Union{Nothing, NTuple{2, AbstractVector{<:Number}}}=nothing,
+function automorphisms(
+    F::ParametricSystem;
+    start_points::Union{Nothing, NTuple{2, AbstractVector{<:Number}}}=nothing,
     degree_bound::Integer=1,
     param_dep::Bool=true,
     tols::Tolerances=Tolerances(),
@@ -699,7 +630,7 @@ function symmetries_fixing_parameters(  # TODO: extend to take an expression map
     logging::Bool=false
 )
 
-    F = run_monodromy(F, xp₀; monodromy_options...)
+    F = run_monodromy(F, start_points; monodromy_options...)
     return symmetries_fixing_parameters!(
         F;
         degree_bound=degree_bound,
@@ -748,7 +679,7 @@ function deck_vandermonde_dense(
     eval_mons = evaluate(mons, samples(F))
     function_id = findfirst(x->x==var, unknowns(F))
     return _deck_vandermonde_matrix(
-        deck_permutations(F)[deck_id],
+        aut_permutations(F)[deck_id],
         function_id,
         samples(F),
         path_ids_for_deck[deck_id],
@@ -801,7 +732,7 @@ function deck_vandermonde_graded(
     eval_num_mons = evaluate(num_mons, samples(F))
     eval_denom_mons = evaluate(denom_mons, samples(F))
     return _deck_vandermonde_matrix(
-        deck_permutations(F)[deck_id],
+        aut_permutations(F)[deck_id],
         var_id,
         samples(F),
         path_ids_for_deck[deck_id],

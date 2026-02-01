@@ -17,6 +17,7 @@ include("sampling/sampled_system.jl")
 include("monomials.jl")
 include("scalings.jl")
 include("interpolation.jl")
-include("deck_transformations.jl")
+include("automorphisms/aut_group.jl")
+include("automorphisms/automorphisms.jl")
 
 end # module

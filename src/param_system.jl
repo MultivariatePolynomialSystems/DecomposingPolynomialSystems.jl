@@ -56,10 +56,10 @@ end
 
 
 """
-    run_monodromy(F::Union{System, AbstractSystem}, xp₀=nothing; options...) -> SampledSystem
+    run_monodromy(F::ParametricSystem, start_points=nothing; options...) -> SampledParametricSystem
 
 Runs [`monodromy_solve`]($(MONODROMY_SOLVE_REF)) on a given polynomial system `F` with starting
-solutions `xp₀[1]` and parameters `xp₀[2]` (if given).
+solutions `start_points[1]` and parameters `start_points[2]` (if given).
 
 ```julia-repl
 julia> @var x a b;

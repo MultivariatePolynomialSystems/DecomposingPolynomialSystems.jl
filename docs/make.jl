@@ -19,16 +19,15 @@ makedocs(;
     ),
     pages = [
         "Introduction" => "index.md",
+        "Parametric Polynomial Systems" => "param_system.md",
         "Sampling Polynomial Systems" => "sampling.md",
-        "Symmetries" => [
-            "Scaling symmetries" => "symmetries/scalings.md",
-            "Deck transformations" => "symmetries/deck.md",
+        "Automorphisms and Lie symmetries" => [
+            "Scaling Lie symmetries" => "symmetries/scalings.md",
+            "Matrix Lie symmetries" => "symmetries/matrix_lie.md",
+            "Automorphisms" => "symmetries/automorphisms.md",
         ],
-        "Invariants" => [
-            "Invariants" => "invariants/invariants.md",
-        ],
-        "Decomposing Polynomial Systems" => [
-            "Decompose" => "decomposition/decompose.md",
+        "Decomposing Maps" => [
+            "Interpolating decomposing maps" => "decomposing/decomposing.md",
         ]
     ],
 )

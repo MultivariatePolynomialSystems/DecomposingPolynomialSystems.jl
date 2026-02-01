@@ -10,7 +10,7 @@ export SampledParametricSystem,
     samples,
     monodromy_permutations,
     block_partitions,
-    deck_permutations
+    aut_permutations
 
 using HomotopyContinuation: Result, MonodromyResult, ntracked, is_success, solution
 using HomotopyContinuation: ParameterHomotopy, Tracker, track
@@ -21,7 +21,7 @@ struct MonodromyInfo
     n_solutions::Int
     monodromy_permutations::Vector{Vector{Int}}
     block_partitions::Vector{Vector{Vector{Int}}}
-    deck_permutations::Vector{Vector{Int}}
+    aut_permutations::Vector{Vector{Int}}
 end
 
 MonodromyInfo() = MonodromyInfo(1, [], [], [])
@@ -132,12 +132,12 @@ Returns the vector of all block partitions of the solutions of `F`.
 block_partitions(F::SampledParametricSystem) = F.mon_info.block_partitions
 
 """
-    deck_permutations(F::SampledParametricSystem) -> Vector{Vector{Int}}
+    aut_permutations(F::SampledParametricSystem) -> Vector{Vector{Int}}
 
-Returns the vector of deck permutations of the solutions (actions of deck transformations
+Returns the vector of automorphism permutations of the solutions (actions of automorphisms
 on the solutions) of `F`.
 """
-deck_permutations(F::SampledParametricSystem) = F.mon_info.deck_permutations
+aut_permutations(F::SampledParametricSystem) = F.mon_info.aut_permutations
 
 (F::SampledParametricSystem)(
     x₀::AbstractVector{<:Number},
@@ -167,7 +167,7 @@ function SampledParametricSystem(F::ParametricSystem, MR::MonodromyResult)
 
     monodromy_permutations = _filter_permutations(HC.permutations(MR))
     block_partitions = all_block_partitions(to_group(monodromy_permutations))
-    deck_permutations = to_permutations(centralizer(monodromy_permutations))
+    aut_permutations = to_permutations(centralizer(monodromy_permutations))
 
     return SampledParametricSystem(
         F,
@@ -175,7 +175,7 @@ function SampledParametricSystem(F::ParametricSystem, MR::MonodromyResult)
             n_sols,
             monodromy_permutations,
             block_partitions,
-            deck_permutations
+            aut_permutations
         ),
         Dict(Vector(1:n_sols) => Samples(sols, params))
     )
@@ -211,7 +211,7 @@ function random_samples(
 end
 
 """
-    run_monodromy(F::SampledSystem, xp₀=nothing; options...) -> SampledSystem
+    run_monodromy(F::SampledParametricSystem, start_points=nothing; options...) -> SampledParametricSystem
 
 Reruns [`monodromy_solve`]($(MONODROMY_SOLVE_REF)) on a given sampled polynomial system `F`.
 """
@@ -276,7 +276,7 @@ function extract_samples(
 end
 
 """
-    sample!(F::SampledSystem; path_ids=Vector(1:nsolutions(F)), n_instances=1) -> SampledSystem
+    sample!(F::SampledParametricSystem; path_ids=Vector(1:nsolutions(F)), n_instances=1) -> SampledParametricSystem
 
 Uses [`solve`]($(SOLVE_REF)) method to track the solutions of a poynomial system `F` with ids
 defined by `path_ids` to `n_instances` random parameters.
